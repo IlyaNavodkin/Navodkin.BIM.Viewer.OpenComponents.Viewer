@@ -1,0 +1,1 @@
+export { HelloWorldComponent } from "./HelloWorldComponent";
