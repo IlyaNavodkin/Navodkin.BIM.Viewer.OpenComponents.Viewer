@@ -1,4 +1,4 @@
-<template>
+<!-- <template>
   <div :class="$style.root" tabindex="0" @keydown.esc="handleEscape">
     <div :class="$style.toolbar">
       Toolbar
@@ -226,7 +226,7 @@ const openView = (viewName: string) => {
     return;
   }
 
-  view.range = 100;
+  view.range = 1100;
   // view.distance = levelHeight + 0.5;
 
   view.helpersVisible = true;
@@ -875,4 +875,4 @@ onUnmounted(() => {
   background-color: #ffeb3b;
   font-weight: bold;
 }
-</style>
+</style> -->

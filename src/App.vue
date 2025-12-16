@@ -18,7 +18,7 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import * as OBC from "@thatopen/components";
 import { HelloWorldComponent } from "@/view-models/components";
-import TestingViewport from "@/view/components/TestingViewport.vue";
+import TestingViewport from "@/view/components/viewport/TestingViewport.vue";
 
 const message = ref<string>("");
 let components: OBC.Components | null = null;
