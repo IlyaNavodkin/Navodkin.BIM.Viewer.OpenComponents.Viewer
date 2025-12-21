@@ -1,10 +1,9 @@
 <script lang="ts" setup>
-import { reactive, onMounted, onUnmounted, shallowRef } from "vue";
-import { useSelection } from "../composables/useSelection";
+import { reactive, onMounted, onUnmounted, computed } from "vue";
 import { useViewer } from "../composables/useViewer";
 import LoadingScreen from "./LoadingScreen.vue";
-import ViewSidebar from "./ViewSidebar.vue";
-import * as OBC from "@thatopen/components";
+import Clipper3dSidebar from "./Clipper3dSidebar.vue";
+import ElementsSidebar from "./ElementsSidebar.vue";
 
 const container = reactive<{ value: HTMLDivElement | undefined }>({
   value: undefined,
@@ -14,74 +13,61 @@ const viewer = useViewer();
 const {
   isLoading,
   loadingProgress,
-  components,
   handleFileChange,
   setupViewer,
   disposeViewer,
-  modelNames,
-  currentWord,
-  views,
-  viewsList,
+  filteredElements,
+  isLoadingElements,
+  selectEmployeePlacement: zoomToElement,
+  tableSelectionState,
+  levelsData,
+  isLoadingLevels,
+  toggleLevelClip,
 } = viewer;
 
-const highlighterRef = shallowRef<ReturnType<typeof useSelection> | undefined>(
-  undefined
-);
+const modelIsLoaded = computed(() => {
+  return viewer.loadedModel.value !== undefined;
+});
+
+/**
+ * Обработчик нажатия клавиш
+ */
+const handleKeyDown = (event: KeyboardEvent) => {
+  // ESC - очистить выбор стола
+  if (event.key === "Escape") {
+    tableSelectionState.value?.clearSelection();
+  }
+};
 
 onMounted(async () => {
   if (!container.value) return;
   await setupViewer(container.value);
 
-  // Настраиваем автоматическое выделение при клике
-  if (components.value && currentWord.value) {
-    const selection = useSelection(components.value, currentWord.value);
-    highlighterRef.value = selection;
-
-    // Получаем Raycasters для автоматического выделения при клике
-    // Raycaster автоматически будет вызывать highlighter при клике
-    components.value.get(OBC.Raycasters).get(currentWord.value);
-
-    // Выделение происходит автоматически при одинарном клике!
-    console.log("Автоматическое выделение настроено");
-
-    // viewsList теперь доступен из useViewer
-    console.log("Views list:", viewsList.value);
-  }
+  // Добавляем обработчик клавиатуры
+  window.addEventListener("keydown", handleKeyDown);
 });
 
 onUnmounted(() => {
+  // Удаляем обработчик клавиатуры
+  window.removeEventListener("keydown", handleKeyDown);
   disposeViewer();
 });
 </script>
 
 <template>
-  <div :class="$style.root" tabindex="0">
+  <div :class="$style.root" tabindex="0" @keydown="handleKeyDown">
     <LoadingScreen v-if="isLoading" :progress="loadingProgress" />
     <div :class="$style.layout">
-      <ViewSidebar
-        :views="views"
-        :views-list="viewsList || []"
+      <Clipper3dSidebar
+        :levels-data="levelsData"
+        :is-loading-levels="isLoadingLevels"
         :class="$style.sidebar"
+        @toggleLevelClip="toggleLevelClip"
       />
       <div :class="$style.mainContent">
-        <div :class="$style.infoPanel">
-          <div :class="$style.infoSection">
-            <div :class="$style.infoLabel">Загруженные модели:</div>
-            <div :class="$style.infoValue">
-              {{ modelNames || "Нет моделей" }}
-            </div>
-          </div>
-          <div :class="$style.infoSection">
-            <div :class="$style.infoLabel">Выделение:</div>
-            <div :class="$style.infoValue">
-              Кликните на элемент для выделения. Информация отобразится в
-              консоли.
-            </div>
-          </div>
-        </div>
         <div :class="$style.toolbar">
           Toolbar
-          <input type="file" @change="handleFileChange" />
+          <input v-if="!modelIsLoaded" type="file" @change="handleFileChange" />
         </div>
 
         <div
@@ -89,6 +75,12 @@ onUnmounted(() => {
           :class="$style.viewport"
         ></div>
       </div>
+      <ElementsSidebar
+        :elements="filteredElements"
+        :isLoading="isLoadingElements"
+        @element-click="zoomToElement"
+        :class="$style.elementsSidebar"
+      />
     </div>
   </div>
 </template>
@@ -113,6 +105,11 @@ onUnmounted(() => {
 }
 
 .sidebar {
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.elementsSidebar {
   flex-shrink: 0;
   height: 100%;
 }

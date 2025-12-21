@@ -1,6 +1,5 @@
-import { computed, shallowRef } from "vue";
+import { shallowRef } from "vue";
 import * as OBC from "@thatopen/components";
-import { FragmentsModel, LodMode } from "@thatopen/fragments";
 import * as THREE from "three";
 import * as FRAGS from "@thatopen/fragments";
 import * as OBF from "@thatopen/components-front";
@@ -18,19 +17,37 @@ export const useSelection = (
   const highlighter = shallowRef<OBF.Highlighter | undefined>(undefined);
   highlighter.value = components.get(OBF.Highlighter);
 
-  // Настройка highlighter с определением материала для выделения
+  // Настройка highlighter без изменения цвета (только outliner будет показывать выделение)
   highlighter.value.setup({
     world,
-    selectMaterialDefinition: {
-      // Цвет выделения (можно изменить по необходимости)
-      color: new THREE.Color("#bcf124"),
-      opacity: 1,
-      transparent: false,
-      renderedFaces: 0,
-    },
+    autoUpdateFragments: true,
+    selectMaterialDefinition: null, // Отключаем цвет выделения, используем только outliner
   });
 
-  const clearOutlines = () => {
+  // Проверяем, что используется PostproductionRenderer и включаем postproduction
+  // Outliner требует включенный postproduction для работы
+  if (world.renderer instanceof OBF.PostproductionRenderer) {
+    const { postproduction } = world.renderer;
+    postproduction.enabled = true;
+  } else {
+    console.warn(
+      "Outliner requires PostproductionRenderer. Current renderer type:",
+      world.renderer?.constructor.name
+    );
+  }
+
+  const outliner = shallowRef<OBF.Outliner | undefined>(undefined);
+  outliner.value = components.get(OBF.Outliner);
+  outliner.value.world = world;
+  outliner.value.color = new THREE.Color("red");
+  outliner.value.thickness = 1;
+  outliner.value.fillColor = new THREE.Color("red");
+  outliner.value.fillOpacity = 0.2;
+
+  // As a best practice, enable it after it has been configured
+  outliner.value.enabled = true;
+
+  const clearHighlight = () => {
     if (!highlighter.value) return;
     highlighter.value!.clear("select");
   };
@@ -38,7 +55,7 @@ export const useSelection = (
   // Обработка события выделения элементов
   highlighter.value.events.select.onHighlight.add(async (modelIdMap) => {
     console.log("=== Элемент выделен ===");
-
+    outliner.value!.addItems(modelIdMap);
     // Получаем данные выделенных элементов и их property sets
     for (const [modelId, localIds] of Object.entries(modelIdMap)) {
       const model = fragments.list.get(modelId);
@@ -47,8 +64,7 @@ export const useSelection = (
       for (const localId of localIds) {
         // Получаем базовую информацию об элементе
         const itemsData = await model.getItemsData([localId], {
-          attributesDefault: false,
-          attributes: ["Name", "GlobalId", "Tag", "ObjectType"],
+          attributesDefault: true,
         });
 
         if (itemsData && itemsData.length > 0) {
@@ -56,16 +72,16 @@ export const useSelection = (
           console.log(`\n📦 Элемент (Local ID: ${localId}):`);
           console.log("  Основная информация:", {
             Name: elementData.Name,
-            GlobalId: elementData.GlobalId,
+            LocalId: localIds,
             Tag: elementData.Tag,
             ObjectType: elementData.ObjectType,
+            Category: elementData._category,
           });
         }
 
         // Получаем Property Sets
         const [itemData] = await model.getItemsData([localId], {
-          attributesDefault: false,
-          attributes: ["Name", "NominalValue"],
+          attributesDefault: true,
           relations: {
             IsDefinedBy: { attributes: true, relations: true },
             DefinesOcurrence: { attributes: false, relations: false },
@@ -108,8 +124,9 @@ export const useSelection = (
     console.log("====================\n");
   });
 
-  highlighter.value.events.select.onClear.add(() => {
-    console.log("Selection was cleared");
+  highlighter.value.events.select.onClear.add((modelIdMap) => {
+    console.log("Selection was cleared", modelIdMap);
+    outliner.value!.removeItems(modelIdMap);
   });
 
   const createCustomHighlighter = (
@@ -207,7 +224,7 @@ export const useSelection = (
 
   return {
     highlighter,
-    clearOutlines,
+    clearOutlines: clearHighlight,
     createCustomHighlighter,
     applyCustomHighlight,
     resetCustomHighlighter,

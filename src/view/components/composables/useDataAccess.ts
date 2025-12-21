@@ -1,6 +1,11 @@
 import { computed, shallowRef } from "vue";
 import * as OBC from "@thatopen/components";
-import { FragmentsModel, LodMode } from "@thatopen/fragments";
+import {
+  FragmentsModel,
+  ItemAttribute,
+  ItemData,
+  LodMode,
+} from "@thatopen/fragments";
 import * as THREE from "three";
 import * as FRAGS from "@thatopen/fragments";
 import * as OBF from "@thatopen/components-front";
@@ -29,7 +34,13 @@ export type Property = {
   id: number;
 };
 
-export const usePropertyAccess = () => {
+export type LevelsViewData = {
+  name: string;
+  elevation: number;
+  localId: number;
+};
+
+export const useDataAccess = () => {
   const formatItemPsets = (rawPsets: FRAGS.ItemData[]) => {
     const result: Record<string, Record<string, any>> = {};
 
@@ -76,6 +87,11 @@ export const usePropertyAccess = () => {
     },
   };
 
+  const getSpatialStructure = async (model: FragmentsModel) => {
+    const result = await model.getSpatialStructure();
+    return result;
+  };
+
   const getPropertySet = async (localId: number, model: FragmentsModel) => {
     const pgsets = await getItemPropertySets(localId, model);
     return formatItemPsets(pgsets ?? []);
@@ -113,10 +129,48 @@ export const usePropertyAccess = () => {
     return null;
   };
 
+  const getLevels = async (model: FragmentsModel) => {
+    let levelsViewData: LevelsViewData[] = [];
+
+    if (model) {
+      const storeyItems = await model.getItemsOfCategories([
+        /IFCBUILDINGSTOREY/,
+      ]);
+      const storeyIds = Object.values(storeyItems).flat();
+
+      console.log("Найденные уровни (localId):", storeyIds);
+
+      if (storeyIds.length > 0) {
+        const storeyData = await model.getItemsData(storeyIds, {
+          attributesDefault: true,
+        });
+        console.log("Данные уровней:", storeyData);
+
+        levelsViewData = storeyData.map((item: ItemData) => {
+          const nameattr = item.Name as ItemAttribute;
+          const elevationattr = item.Elevation as ItemAttribute;
+          const localIdattr = item._localId as ItemAttribute;
+
+          return {
+            name: nameattr.value,
+            elevation: elevationattr.value,
+            localId: localIdattr.value,
+          };
+        });
+      }
+    }
+
+    return levelsViewData;
+  };
+
   return {
     getPropertySet,
 
     getEntitiesByLocalId,
     getEntityByLocalId,
+
+    getSpatialStructure,
+
+    getLevels,
   };
 };
