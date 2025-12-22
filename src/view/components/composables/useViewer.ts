@@ -1,4 +1,4 @@
-import { shallowRef, ref } from "vue";
+import { shallowRef, ref, watch } from "vue";
 import * as OBC from "@thatopen/components";
 import { FragmentsModel, LodMode } from "@thatopen/fragments";
 import * as THREE from "three";
@@ -70,6 +70,112 @@ export const useViewer = () => {
 
   const levelsData = ref<LevelsViewData[]>([]);
   const isLoadingLevels = ref(false);
+
+  /**
+   * Изменяет цвет материалов элементов на красный
+   * Использует прямое изменение материалов через модель
+   */
+  const applyRedMaterialToElements = async (
+    localIds: number[],
+    model: FragmentsModel
+  ) => {
+    if (!fragmentManager.value || !currentWord.value || localIds.length === 0) {
+      return;
+    }
+
+    try {
+      // Получаем объект модели из сцены
+      const modelObject = model.object;
+
+      if (!modelObject) {
+        console.warn("Объект модели не найден");
+        return;
+      }
+
+      // Функция для изменения цвета материала
+      const changeMaterialColor = (mat: THREE.Material, color: number) => {
+        if (
+          mat instanceof THREE.MeshLambertMaterial ||
+          mat instanceof THREE.MeshStandardMaterial ||
+          mat instanceof THREE.MeshPhongMaterial ||
+          mat instanceof THREE.MeshBasicMaterial
+        ) {
+          // Сохраняем оригинальный цвет, если еще не сохранен
+          if (!mat.userData.originalColor) {
+            mat.userData.originalColor = mat.color.clone();
+          }
+          mat.color.set(color);
+          mat.needsUpdate = true;
+        }
+      };
+
+      // Проходим по всем мешам модели и изменяем материалы для нужных элементов
+      modelObject.traverse((object: THREE.Object3D) => {
+        if (object instanceof THREE.Mesh) {
+          const mesh = object as THREE.Mesh;
+          const material = mesh.material;
+
+          // Обрабатываем случай, когда материал - массив
+          if (Array.isArray(material)) {
+            material.forEach((mat) => {
+              if (mat.userData && mat.userData.localId) {
+                const localId = mat.userData.localId;
+                if (localIds.includes(localId)) {
+                  changeMaterialColor(mat, 0xff0000);
+                }
+              }
+            });
+          }
+          // Обрабатываем случай, когда материал - один объект
+          else if (material && material.userData && material.userData.localId) {
+            const localId = material.userData.localId;
+            if (localIds.includes(localId)) {
+              changeMaterialColor(material, 0xff0000);
+            }
+          }
+        }
+      });
+
+      // Обновляем фрагменты для отображения изменений
+      await fragmentManager.value.core.update(true);
+
+      console.log(`Применен красный материал к ${localIds.length} элементам`);
+    } catch (error) {
+      console.error("Ошибка при изменении материалов элементов:", error);
+    }
+  };
+
+  // Watch для отслеживания изменений в filteredElements
+  watch(
+    filteredElements,
+    async (newElements, oldElements) => {
+      // Проверяем, что модель загружена
+      if (!currentModel.value || !fragmentManager.value) {
+        return;
+      }
+
+      // Проверяем, что элементы действительно изменились
+      if (
+        oldElements &&
+        newElements.length === oldElements.length &&
+        newElements.every((el, idx) => el.LocalId === oldElements[idx]?.LocalId)
+      ) {
+        return;
+      }
+
+      // Если элементов нет, ничего не делаем
+      if (newElements.length === 0) {
+        return;
+      }
+
+      // Получаем localIds элементов
+      const localIds = newElements.map((el) => el.LocalId);
+
+      // Применяем красный материал к элементам
+      await applyRedMaterialToElements(localIds, currentModel.value);
+    },
+    { deep: true }
+  );
 
   const handleFileChange = async (event: Event) => {
     const file = (event.target as HTMLInputElement).files?.[0];
@@ -354,7 +460,6 @@ export const useViewer = () => {
     // Включаем postproduction перед установкой стиля
     // Согласно документации, postproduction должен быть enabled перед установкой style
     render.postproduction.enabled = true;
-    render.postproduction.style = PostproductionAspect.PEN_SHADOWS;
 
     ifcLoader.value = components.value.get(OBC.IfcLoader);
 
@@ -411,6 +516,13 @@ export const useViewer = () => {
     // Raycaster автоматически будет вызывать highlighter при клике
     components.value.get(OBC.Raycasters).get(world);
     console.log("Автоматическое выделение настроено");
+
+    // Устанавливаем стиль postproduction после инициализации всех компонентов
+    // COLOR_PEN_SHADOWS требует полной инициализации всех компонентов, включая fragmentManager
+    // Согласно документации, dynamicAnchor должен быть false для корректной работы postproduction
+    world.dynamicAnchor = false;
+
+    render.postproduction.style = PostproductionAspect.PEN_SHADOWS;
 
     fragmentManager.value.list.onItemSet.add(({ value: model }) => {
       if (!currentWord.value) throw new Error("Word is not exists");
