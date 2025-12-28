@@ -1,12 +1,13 @@
 <script lang="ts" setup>
 import { computed, ref } from "vue";
 import type { ElementData } from "../composables/viewer";
-import { useEmployeeStore } from "../../../stores/employee";
+import { useElementFilter } from "../composables/viewer/features/useElementFilter";
+import WorkplaceList from "./WorkplaceList.vue";
 
 interface Props {
-  elements: ElementData[];
-  isLoading?: boolean;
-  selectedElementId?: number | null;
+  elements: ElementData[] | { value: ElementData[] };
+  isLoading?: boolean | { value: boolean };
+  selectedElementId?: number | null | { value: number | null };
 }
 
 const emit = defineEmits<{
@@ -20,8 +21,24 @@ const props = withDefaults(defineProps<Props>(), {
   selectedElementId: null,
 });
 
-// Store для работы с сотрудниками
-const employeeStore = useEmployeeStore();
+// Разворачиваем ref/computed для использования в компоненте
+const elements = computed(() => {
+  const value = props.elements;
+  return Array.isArray(value) ? value : value.value;
+});
+
+const isLoading = computed(() => {
+  const value = props.isLoading ?? false;
+  return typeof value === "boolean" ? value : value.value;
+});
+
+const selectedElementId = computed(() => {
+  const value = props.selectedElementId ?? null;
+  return value === null || typeof value === "number" ? value : value.value;
+});
+
+// Используем методы из composable для работы с сотрудниками
+const { isPlacementOccupied } = useElementFilter();
 
 // Состояние сворачивания сайдбара
 const isCollapsed = ref(false);
@@ -46,7 +63,7 @@ const clearSearch = () => {
  */
 const availableLevels = computed(() => {
   const levels = new Set<string>();
-  props.elements.forEach((element) => {
+  elements.value.forEach((element) => {
     if (element.Level) {
       levels.add(element.Level);
     }
@@ -77,7 +94,7 @@ const compareValues = (a: string | null, b: string | null): number => {
 
 // Фильтруем элементы по поисковому запросу и выбранному уровню
 const filteredElements = computed(() => {
-  let filtered = props.elements;
+  let filtered = elements.value;
 
   // Фильтрация по уровню
   if (selectedLevel.value) {
@@ -100,9 +117,7 @@ const filteredElements = computed(() => {
       const objectType = element.ObjectType?.toLowerCase() || "";
       const comments = element.Comments?.toLowerCase() || "";
       const level = element.Level?.toLowerCase() || "";
-      const placementNumber = getPlacementNumber(element)?.toLowerCase() || "";
-      const employee = getEmployeeByPlacement(element);
-      const employeeName = employee?.name?.toLowerCase() || "";
+      const placementNumber = element.Comments?.toLowerCase() || "";
 
       return (
         name.includes(query) ||
@@ -110,8 +125,7 @@ const filteredElements = computed(() => {
         objectType.includes(query) ||
         comments.includes(query) ||
         level.includes(query) ||
-        placementNumber.includes(query) ||
-        employeeName.includes(query)
+        placementNumber.includes(query)
       );
     });
   }
@@ -134,52 +148,22 @@ const filteredElements = computed(() => {
 /**
  * Обработчик клика на элемент
  */
-const handleElementClick = (element: ElementData) => {
-  emit("elementClick", element.LocalId);
+const handleElementClick = (localId: number) => {
+  emit("elementClick", localId);
 };
 
 /**
- * Проверяет, является ли элемент выбранным
+ * Обработчик наведения мыши на элемент
  */
-const isElementSelected = (element: ElementData): boolean => {
-  return (
-    props.selectedElementId !== null &&
-    props.selectedElementId === element.LocalId
-  );
+const handleElementMouseEnter = (localId: number) => {
+  emit("elementMouseEnter", localId);
 };
 
 /**
- * Получает номер места из Comments
+ * Обработчик ухода мыши с элемента
  */
-const getPlacementNumber = (element: ElementData): string | null => {
-  return element.Comments || null;
-};
-
-/**
- * Проверяет, занято ли место
- */
-const isPlacementOccupied = (element: ElementData): boolean => {
-  const placementNumber = getPlacementNumber(element);
-  if (!placementNumber) return false;
-  const employee = employeeStore.getEmployeeByPlacementId(placementNumber);
-  return employee !== undefined;
-};
-
-/**
- * Получает информацию о сотруднике, занявшем место
- */
-const getEmployeeByPlacement = (element: ElementData) => {
-  const placementNumber = getPlacementNumber(element);
-  if (!placementNumber) return null;
-  return employeeStore.getEmployeeByPlacementId(placementNumber);
-};
-
-const handleMouseEnter = (element: ElementData) => {
-  emit("elementMouseEnter", element.LocalId);
-};
-
-const handleMouseLeave = (element: ElementData) => {
-  emit("elementMouseLeave", element.LocalId);
+const handleElementMouseLeave = (localId: number) => {
+  emit("elementMouseLeave", localId);
 };
 </script>
 
@@ -251,7 +235,7 @@ const handleMouseLeave = (element: ElementData) => {
     </div>
 
     <div :class="$style.content" v-if="!isCollapsed">
-      <div v-if="props.isLoading" :class="$style.loadingState">
+      <div v-if="isLoading" :class="$style.loadingState">
         <p :class="$style.loadingText">Загрузка элементов...</p>
       </div>
 
@@ -264,49 +248,14 @@ const handleMouseLeave = (element: ElementData) => {
         </p>
       </div>
 
-      <div v-else :class="$style.elementsList">
-        <div
-          v-for="element in filteredElements"
-          :key="element.LocalId"
-          :class="[
-            $style.elementItem,
-            { [$style.elementItemActive]: isElementSelected(element) },
-          ]"
-          @click="handleElementClick(element)"
-          @mouseenter="handleMouseEnter(element)"
-          @mouseleave="handleMouseLeave(element)"
-        >
-          <div :class="$style.elementInfo">
-            <div :class="$style.elementName">
-              Место #
-              {{ getPlacementNumber(element) || `Element ${element.LocalId}` }}
-            </div>
-            <div
-              v-if="isPlacementOccupied(element)"
-              :class="$style.employeeInfo"
-            >
-              <div :class="$style.employeeAvatar">
-                <img
-                  :src="getEmployeeByPlacement(element)?.previewUrlAvatar"
-                  :alt="getEmployeeByPlacement(element)?.name"
-                />
-              </div>
-              <div :class="$style.employeeDetails">
-                <div :class="$style.employeeName">
-                  {{ getEmployeeByPlacement(element)?.name }}
-                </div>
-                <div :class="$style.employeeStatus">Занято</div>
-              </div>
-            </div>
-            <div v-else :class="$style.placementStatus">
-              <span :class="$style.statusFree">Свободно</span>
-            </div>
-            <div :class="$style.elementDetails">
-              <span :class="$style.elementId">ID: {{ element.LocalId }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <WorkplaceList
+        v-else
+        :elements="filteredElements"
+        :selectedElementId="selectedElementId"
+        @elementClick="handleElementClick"
+        @elementMouseEnter="handleElementMouseEnter"
+        @elementMouseLeave="handleElementMouseLeave"
+      />
     </div>
 
     <div :class="$style.footer" v-if="!isCollapsed">
@@ -314,7 +263,7 @@ const handleMouseLeave = (element: ElementData) => {
         <span :class="$style.footerText">
           Всего: {{ filteredElements.length }}
           <span v-if="searchQuery || selectedLevel || hideFree">
-            из {{ props.elements.length }}
+            из {{ elements.length }}
           </span>
         </span>
       </div>
@@ -578,190 +527,6 @@ const handleMouseLeave = (element: ElementData) => {
   font-size: 13px;
   color: #999;
   line-height: 1.5;
-}
-
-.elementsList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.elementItem {
-  display: flex;
-  align-items: flex-start;
-  padding: 12px;
-  background: #fafafa;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-
-  &:hover {
-    background: #f0f0f0;
-    border-color: #667eea;
-    transform: translateX(-4px);
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
-  }
-
-  &:active {
-    transform: translateX(-2px);
-  }
-
-  &.elementItemActive {
-    background: linear-gradient(
-      135deg,
-      rgba(102, 126, 234, 0.1) 0%,
-      rgba(118, 75, 162, 0.1) 100%
-    );
-    border: 2px solid #667eea;
-    border-left: 4px solid #667eea;
-    box-shadow: 0 2px 12px rgba(102, 126, 234, 0.25);
-
-    &:hover {
-      background: linear-gradient(
-        135deg,
-        rgba(102, 126, 234, 0.15) 0%,
-        rgba(118, 75, 162, 0.15) 100%
-      );
-      border-color: #764ba2;
-      border-left-color: #764ba2;
-    }
-
-    .elementIcon {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-    }
-
-    .elementName {
-      color: #667eea;
-      font-weight: 700;
-    }
-  }
-}
-
-.elementIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 6px;
-  color: white;
-  flex-shrink: 0;
-  margin-right: 12px;
-}
-
-.elementInfo {
-  flex: 1;
-  min-width: 0;
-}
-
-.elementName {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 4px;
-  word-break: break-word;
-  line-height: 1.3;
-}
-
-.elementMeta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 4px;
-  font-size: 12px;
-  color: #666;
-}
-
-.elementTag,
-.elementType {
-  color: #888;
-}
-
-.elementDetails {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 11px;
-  color: #999;
-  padding-top: 4px;
-  border-top: 1px solid #e0e0e0;
-  margin-top: 8px;
-}
-
-.employeeInfo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  padding: 8px;
-  background: rgba(102, 126, 234, 0.05);
-  border-radius: 6px;
-  border: 1px solid rgba(102, 126, 234, 0.2);
-}
-
-.employeeAvatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  overflow: hidden;
-  flex-shrink: 0;
-  border: 2px solid rgba(102, 126, 234, 0.3);
-  background: #fff;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-}
-
-.employeeDetails {
-  flex: 1;
-  min-width: 0;
-}
-
-.employeeName {
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 2px;
-}
-
-.employeeStatus {
-  font-size: 11px;
-  color: #667eea;
-  font-weight: 500;
-}
-
-.placementStatus {
-  margin-top: 8px;
-  padding: 6px 10px;
-  background: rgba(102, 126, 234, 0.1);
-  border-radius: 6px;
-  border: 1px solid rgba(102, 126, 234, 0.2);
-  display: inline-block;
-}
-
-.statusFree {
-  font-size: 12px;
-  color: #667eea;
-  font-weight: 600;
-}
-
-.elementId,
-.elementCategory,
-.elementComments {
-  color: #aaa;
-}
-
-.elementComments {
-  font-style: italic;
-  color: #888;
-  margin-top: 4px;
 }
 
 .footer {

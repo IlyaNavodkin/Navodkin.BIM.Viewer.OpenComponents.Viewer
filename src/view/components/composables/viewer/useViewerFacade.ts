@@ -1,158 +1,118 @@
-import { ref, shallowRef, computed, onUnmounted } from "vue";
+import { computed, onUnmounted } from "vue";
 import { FragmentsModel } from "@thatopen/fragments";
 import * as THREE from "three";
+import { useViewerCoreStore } from "@/stores/useViewerCoreStore";
 import { useViewerCore } from "./core/useViewerCore";
 import { useModelManager } from "./core/useModelManager";
 import { useModelData } from "./data/useModelData";
 import { useSelection } from "./features/useSelection";
-import { useMarkers } from "./features/useMarkers";
-import { useHover } from "./features/useHover";
 import { useClipStyler } from "./features/useClip";
-import { useViews } from "./features/useViews";
-import {
-  useElementFilter,
-  type ElementData,
-} from "./features/useElementFilter";
+import { useElementFilter } from "./features/useElementFilter";
+import type { ElementData } from "./features/useElementFilter";
 
 /**
- * Фасадный слой для унифицированного доступа ко всем функциям viewer
- * Предоставляет единый API, совместимый с существующим useViewer
+ * Фасадный слой для работы с viewer
+ *
+ * Архитектура:
+ * - Все состояния хранятся в нереактивном store (useViewerCoreStore)
+ * - Store используется как единая точка входа, но НЕ реактивный
+ * - Для реактивности используются ref/computed только для примитивов
+ * - Composables работают напрямую со store
+ * - Фасад предоставляет удобный API и методы высокого уровня
+ *
+ * Принципы:
+ * - Минимализм: возвращаем только то, что действительно нужно
+ * - Прямой доступ: используем store напрямую
+ * - Простота: методы делают одну вещь и делают её хорошо
+ * - Нет реактивности для больших объектов (Three.js, OBC) - избегаем конфликтов с прокси
  */
 export const useViewer = () => {
-  // Инициализация базовых слоев
+  const store = useViewerCoreStore();
+
+  // Используем shallowRef из store напрямую - они уже реактивные
+  const isLoading = store.modelManager.isLoading;
+  const loadingProgress = store.modelManager.loadingProgress;
+
+  // Инициализируем composables (они работают напрямую со store)
   const core = useViewerCore();
-  const modelManager = useModelManager(
-    core.components,
-    core.workerUrl,
-    core.currentWord
-  );
-
-  // Инициализация слоя данных
+  const modelManager = useModelManager();
   const modelData = useModelData();
-
-  // Инициализация фич (зависят от core и/или modelManager)
-  const selection = shallowRef<ReturnType<typeof useSelection> | undefined>(
-    undefined
-  );
-  const markers = shallowRef<ReturnType<typeof useMarkers> | undefined>(
-    undefined
-  );
-  let hoverState: ReturnType<typeof useHover> | undefined = undefined;
-  const clip = shallowRef<ReturnType<typeof useClipStyler> | undefined>(
-    undefined
-  );
-  const views = shallowRef<ReturnType<typeof useViews> | undefined>(undefined);
-  const elementFilter = shallowRef<
-    ReturnType<typeof useElementFilter> | undefined
-  >(undefined);
-
-  // Дополнительные реактивные состояния для совместимости
-  const selectedElement = ref<{
-    localId: number;
-    distance: number;
-    point: THREE.Vector3;
-  } | null>(null);
+  const selection = useSelection();
+  const clip = useClipStyler();
+  const elementFilter = useElementFilter();
 
   /**
    * Инициализирует viewer и все его компоненты
-   * @param containerElement - HTML элемент контейнера
    */
   const setupViewer = async (containerElement: HTMLDivElement) => {
-    // Инициализируем базовый слой
+    console.log(
+      `[useViewer.setupViewer] Начало. isLoading: ${store.modelManager.isLoading.value}`
+    );
     await core.init(containerElement);
-
-    // Инициализируем менеджер моделей
+    console.log(
+      `[useViewer.setupViewer] После core.init. isLoading: ${store.modelManager.isLoading.value}`
+    );
     await modelManager.init();
-
-    // Инициализируем фичи
-    selection.value = useSelection(core.components, core.currentWord);
-    markers.value = useMarkers(core.components, core.currentWord);
-    // hoverState = useHover(core.components, core.currentWord);
-    clip.value = useClipStyler(core.components, core.currentWord);
-    views.value = useViews(core.components, core.currentWord);
-
-    // Инициализируем фильтр элементов (зависит от modelManager.model)
-    if (!selection.value?.highlighter.value) {
-      throw new Error("Highlighter не инициализирован");
-    }
-    elementFilter.value = useElementFilter(
-      modelManager.model,
-      selection.value.highlighter.value,
-      selection.value.mainSelector
+    console.log(
+      `[useViewer.setupViewer] После modelManager.init. isLoading: ${store.modelManager.isLoading.value}`
+    );
+    selection.init();
+    clip.init();
+    console.log(
+      `[useViewer.setupViewer] Конец. isLoading: ${store.modelManager.isLoading.value}`
     );
   };
 
   /**
    * Освобождает все ресурсы viewer
    */
-  const disposeViewer = async () => {
-    // Освобождаем фичи
-    elementFilter.value = undefined;
-    clip.value = undefined;
-    views.value = undefined;
-    hoverState = undefined;
-    markers.value = undefined;
-    selection.value = undefined;
-    elementFilter.value = undefined;
-
-    // Освобождаем слои данных
+  const disposeViewer = () => {
+    clip.dispose();
+    selection.clearOutlines();
     modelData.clear();
-
-    // Освобождаем менеджер моделей
+    elementFilter.clear();
     modelManager.dispose();
-
-    // Освобождаем базовый слой
     core.dispose();
   };
 
   /**
    * Загружает IFC модель и инициализирует связанные данные
-   * @param path - путь к файлу
-   * @param name - имя модели
    */
-  const loadIfc = async (path: string, name: string) => {
+  const loadIfc = async (
+    path: string,
+    name: string
+  ): Promise<FragmentsModel> => {
     const model = await modelManager.load(path, name);
-
-    // Загружаем уровни
     await modelData.loadLevels(model);
-
-    // Создаем views из уровней
-    if (views.value && modelData.levelsData.value.length > 0) {
-      await views.value.createViewsFromLevels(modelData.levelsData.value);
-    }
-
-    // Загружаем отфильтрованные элементы
-    await elementFilter.value?.loadFilteredElements();
-
+    await elementFilter.loadFilteredElements();
     return model;
   };
 
   /**
-   * Обрабатывает изменение файла
+   * Обрабатывает изменение файла и загружает модель
    */
   const handleFileChange = async (event: Event) => {
     const file = (event.target as HTMLInputElement).files?.[0];
-    if (file) {
-      const path = URL.createObjectURL(file);
-      // Используем loadIfc для полной загрузки с инициализацией всех данных
-      await loadIfc(path, file.name);
+    if (!file) return;
 
-      if (!modelManager.fragmentManager.value) {
-        throw new Error("FragmentManager is null");
-      }
+    const path = URL.createObjectURL(file);
+    await loadIfc(path, file.name);
 
-      // Проверяем, что модель была добавлена в fragmentManager
-      const modelName = file.name;
-      const modelExists =
-        modelManager.fragmentManager.value.list.has(modelName);
+    // Проверяем, что модель была добавлена
+    if (!store.modelManager.fragmentManager.value) {
+      throw new Error("FragmentManager не инициализирован");
+    }
 
-      if (!modelExists) {
-        console.warn(
-          `Модель "${modelName}" не найдена в fragmentManager. Доступные модели:`,
-          Array.from(modelManager.fragmentManager.value.list.keys())
-        );
-        return;
-      }
+    const modelExists = store.modelManager.fragmentManager.value.list.has(
+      file.name
+    );
+    if (!modelExists) {
+      console.warn(
+        `Модель "${file.name}" не найдена в fragmentManager.`,
+        `Доступные модели: ${Array.from(
+          store.modelManager.fragmentManager.value.list.keys()
+        ).join(", ")}`
+      );
     }
   };
 
@@ -160,103 +120,135 @@ export const useViewer = () => {
    * Переключает клип уровня
    */
   const toggleLevelClip = (levelName: string) => {
-    if (!core.currentWord.value) return;
+    if (!store.core.currentWord.value || !store.features.clip.clipper.value)
+      return;
 
-    clip.value?.clearAll();
+    const level = modelData.levelsData.value.find((l) => l.name === levelName);
+    if (!level) {
+      console.warn(`Уровень "${levelName}" не найден`);
+      return;
+    }
+
+    clip.clearAll();
 
     const normal = new THREE.Vector3(0, -1, 0);
-    const elevationValue = modelData.levelsData.value.find(
-      (level) => level.name === levelName
-    )?.elevation;
-    if (!elevationValue) return;
-    const point = new THREE.Vector3(0, elevationValue, 0);
+    const point = new THREE.Vector3(0, level.elevation, 0);
 
-    clip.value?.clipper.value?.createFromNormalAndCoplanarPoint(
-      core.currentWord.value,
+    store.features.clip.clipper.value.createFromNormalAndCoplanarPoint(
+      store.core.currentWord.value as any,
       normal,
       point
     );
-    console.log(`Клип уровня "${levelName}" переключен`);
-  };
-
-  /**
-   * Получает информацию об элементе
-   */
-  const getElementInfo = async (
-    model: FragmentsModel,
-    localId: number
-  ): Promise<any> => {
-    return await modelData.getElementInfo(model, localId);
-  };
-
-  /**
-   * Устанавливает выбранный элемент
-   */
-  const setSelectedElement = (
-    element: { localId: number; distance: number; point: THREE.Vector3 } | null
-  ) => {
-    selectedElement.value = element;
   };
 
   /**
    * Выбирает размещение сотрудника (стол)
    */
   const selectEmployeePlacement = async (localId: number) => {
-    await elementFilter.value?.selectTable(localId);
+    await elementFilter.selectTable(localId);
   };
 
-  /**
-   * Выводит элементы в консоль
-   */
-  const consoleToElements = async (model: FragmentsModel) => {
-    const elements = await model.getSpatialStructure();
-    console.log(elements);
-  };
-
-  // Настраиваем автоматическую очистку при размонтировании
+  // Автоматическая очистка при размонтировании
   onUnmounted(() => {
+    // Удаляем функцию синхронизации
+    delete (store as any).__syncRefs;
     disposeViewer();
   });
 
   return {
-    // Реактивные состояния (совместимость с существующим API)
-    container: core.container,
-    components: core.components,
-    ifcLoader: modelManager.ifcLoader,
-    loadedModel: modelManager.model,
-    words: core.words,
-    currentWord: core.currentWord,
-    fragmentManager: modelManager.fragmentManager,
-    hider: modelManager.hider,
-    viewsState: views,
-    markersState: markers,
-    selectionState: selection,
-    elementFilterState: elementFilter,
-    clipperState: clip,
-    filteredElements: computed(
-      () => elementFilter.value?.filteredElements.value ?? []
-    ),
-    isLoadingElements: computed(
-      () => elementFilter.value?.isLoadingElements.value ?? false
-    ),
+    // ============================================
+    // Состояния из store (реактивные через computed для объектов, ref для примитивов)
+    // ============================================
+
+    // Core состояния (используем shallowRef напрямую)
+    container: store.core.container,
+    components: store.core.components,
+    currentWord: store.core.currentWord,
+    workerUrl: store.core.workerUrl,
+
+    // Состояния модели
+    loadedModel: store.modelManager.model,
+    isLoading, // shallowRef для реактивности
+    loadingProgress, // shallowRef для реактивности
+
+    // Состояния данных (используем ref напрямую - они уже реактивные)
     levelsData: modelData.levelsData,
     isLoadingLevels: modelData.isLoadingLevels,
-    workerUrl: core.workerUrl,
-    isLoading: modelManager.isLoading,
-    loadingProgress: modelManager.loadingProgress,
-    selectedElement,
 
-    // Методы (совместимость с существующим API)
-    getElementInfo,
-    setSelectedElement,
-    selectEmployeePlacement,
-    handleFileChange,
+    // Состояния фильтрации элементов (используем shallowRef напрямую)
+    filteredElements: store.features.elementFilter.filteredElements,
+    selectedTableId: store.features.elementFilter.selectedTableId,
+
+    // ============================================
+    // Computed свойства для удобства
+    // ============================================
+
+    /**
+     * Проверяет, загружена ли модель
+     */
+    isModelLoaded: computed(() => store.modelManager.model.value !== undefined),
+
+    /**
+     * Проверяет, загружаются ли элементы
+     */
+    isLoadingElements: computed(() => store.modelManager.isLoading.value),
+
+    // ============================================
+    // Composables для прямого доступа к методам
+    // ============================================
+
+    /**
+     * Фильтр элементов - методы для работы с элементами
+     */
+    elementFilter: {
+      selectTable: elementFilter.selectTable,
+      clearSelection: elementFilter.clearSelection,
+      showPreview: elementFilter.showPreview,
+      clearPreview: elementFilter.clearPreview,
+      loadFilteredElements: elementFilter.loadFilteredElements,
+      // Методы работы с сотрудниками и местами
+      getPlacementNumber: elementFilter.getPlacementNumber,
+      isPlacementOccupied: elementFilter.isPlacementOccupied,
+      getEmployeeByPlacement: elementFilter.getEmployeeByPlacement,
+    },
+
+    /**
+     * Выделение - методы для работы с выделением
+     */
+    selection: {
+      clearOutlines: selection.clearOutlines,
+      createCustomHighlighter: selection.createCustomHighlighter,
+      applyCustomHighlight: selection.applyCustomHighlight,
+      resetCustomHighlighter: selection.resetCustomHighlighter,
+    },
+
+    /**
+     * Клиппинг - методы для работы с клиппингом
+     */
+    clip: {
+      clearAll: clip.clearAll,
+    },
+
+    /**
+     * Данные модели - методы для работы с данными
+     */
+    modelData: {
+      getElementInfo: modelData.getElementInfo,
+      getEntityData: modelData.getEntityData,
+    },
+
+    // ============================================
+    // Методы высокого уровня
+    // ============================================
+
     setupViewer,
     disposeViewer,
-    consoleToElements,
+    loadIfc,
+    handleFileChange,
     toggleLevelClip,
+    selectEmployeePlacement,
   };
 };
 
-// Экспортируем тип ElementData для использования в компонентах
+// Экспортируем типы
 export type { ElementData };

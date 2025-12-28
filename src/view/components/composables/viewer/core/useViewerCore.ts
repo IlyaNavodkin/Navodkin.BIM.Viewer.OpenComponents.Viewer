@@ -1,62 +1,49 @@
-import { ref, shallowRef, type ShallowRef } from "vue";
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
 import { PostproductionAspect } from "@thatopen/components-front";
+import { useViewerCoreStore } from "../../../../../stores/useViewerCoreStore";
 
-/**
- * Базовый слой для инициализации и управления жизненным циклом viewer
- * Отвечает за создание и настройку базовых компонентов (Components, Worlds, Renderer, Camera, Scene)
- */
 export const useViewerCore = () => {
-  const container = shallowRef<HTMLDivElement | undefined>(undefined);
-  const components = shallowRef<OBC.Components | undefined>(undefined);
-  const words = shallowRef<OBC.Worlds | undefined>(undefined);
-  const currentWord = shallowRef<
-    | OBC.SimpleWorld<OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer>
-    | undefined
-  >(undefined);
-  const workerUrl = shallowRef<string | undefined>(undefined);
-  const isInitialized = ref(false);
+  const store = useViewerCoreStore();
 
-  /**
-   * Инициализирует базовые компоненты viewer
-   * @param containerElement - HTML элемент контейнера для viewer
-   * @param options - опциональные параметры инициализации
-   */
   const init = async (containerElement: HTMLDivElement) => {
-    if (isInitialized.value) {
-      console.warn("Viewer уже инициализирован");
-      return;
-    }
-
     if (!containerElement) {
       throw new Error("Container element is required");
     }
 
-    container.value = containerElement;
-    components.value = new OBC.Components();
+    // ВАЖНО: убеждаемся, что isLoading сброшен при инициализации
+    console.log(
+      `[useViewerCore.init] Сбрасываем isLoading: ${store.modelManager.isLoading.value} -> false`
+    );
+    store.setIsLoading(false);
+    store.setLoadingProgress(0);
+    console.log(
+      `[useViewerCore.init] После сброса isLoading: ${store.modelManager.isLoading.value}`
+    );
 
-    if (!components.value) {
+    store.core.container.value = containerElement;
+
+    const componentsInstance = new OBC.Components();
+    store.core.components.value = componentsInstance;
+
+    if (!componentsInstance) {
       throw new Error("Failed to create Components");
     }
 
-    // Создаем Worlds и World
-    words.value = components.value.get(OBC.Worlds);
-    const world = words.value.create<
+    store.core.words.value = componentsInstance.get(OBC.Worlds);
+    const world = store.core.words.value.create<
       OBC.SimpleScene,
       OBC.SimpleCamera,
       OBF.PostproductionRenderer
     >();
-    currentWord.value = world;
+    store.core.currentWord.value = world;
 
-    const componentsInstance = components.value;
-    const containerInstance = container.value;
+    const containerInstance = store.core.container.value;
 
-    if (!componentsInstance || !containerInstance) {
-      throw new Error("Components or container is null");
+    if (!containerInstance) {
+      throw new Error("Container is null");
     }
 
-    // Создаем Scene, Renderer и Camera
     const scene = new OBC.SimpleScene(componentsInstance);
     const render = new OBF.PostproductionRenderer(
       componentsInstance,
@@ -68,20 +55,16 @@ export const useViewerCore = () => {
       throw new Error("Failed to create renderer or camera");
     }
 
-    // Настраиваем World
     world.scene = scene;
     world.renderer = render;
     world.camera = camera;
 
     scene.setup();
 
-    // Инициализируем компоненты
-    components.value.init();
+    componentsInstance.init();
 
-    // Включаем postproduction перед установкой стиля
     render.postproduction.enabled = true;
 
-    // Создаем worker URL для FragmentsManager
     const githubUrl =
       "https://thatopen.github.io/engine_fragment/resources/worker.mjs";
     const fetchedUrl = await fetch(githubUrl);
@@ -90,76 +73,55 @@ export const useViewerCore = () => {
       type: "text/javascript",
     });
     const createdWorkerUrl = URL.createObjectURL(workerFile);
-    workerUrl.value = createdWorkerUrl;
+    store.core.workerUrl.value = createdWorkerUrl;
 
-    // Настраиваем postproduction стиль
-    // Согласно документации, dynamicAnchor должен быть false для корректной работы postproduction
     world.dynamicAnchor = false;
     render.postproduction.style = PostproductionAspect.COLOR;
 
-    // Получаем Raycasters для автоматического выделения при клике
-    components.value.get(OBC.Raycasters).get(world);
-    console.log("Автоматическое выделение настроено");
+    componentsInstance.get(OBC.Raycasters).get(world);
 
-    isInitialized.value = true;
+    console.log("Автоматическое выделение настроено");
   };
 
-  /**
-   * Освобождает ресурсы базовых компонентов
-   */
   const dispose = () => {
     try {
-      // Освобождаем worker URL
-      if (workerUrl.value) {
+      if (store.core.workerUrl.value) {
         try {
-          URL.revokeObjectURL(workerUrl.value);
+          URL.revokeObjectURL(store.core.workerUrl.value);
         } catch (error) {
           console.warn("Ошибка при освобождении worker URL:", error);
         }
-        workerUrl.value = undefined;
+        store.core.workerUrl.value = undefined;
       }
 
-      // Очищаем world, если есть метод dispose
-      if (currentWord.value) {
+      if (store.core.currentWord.value) {
         try {
-          if (typeof currentWord.value.dispose === "function") {
-            currentWord.value.dispose();
+          if (typeof store.core.currentWord.value.dispose === "function") {
+            store.core.currentWord.value.dispose();
           }
         } catch (error) {
           console.warn("Ошибка при освобождении world:", error);
         }
       }
 
-      // Очищаем components (это должно освободить все остальные ресурсы)
-      if (components.value) {
+      if (store.core.components.value) {
         try {
-          components.value.dispose();
+          store.core.components.value.dispose();
         } catch (error) {
           console.warn("Ошибка при освобождении components:", error);
         }
       }
 
-      // Сбрасываем все значения
-      container.value = undefined;
-      components.value = undefined;
-      words.value = undefined;
-      currentWord.value = undefined;
-      isInitialized.value = false;
+      store.core.container.value = undefined;
+      store.core.components.value = undefined;
+      store.core.words.value = undefined;
+      store.core.currentWord.value = undefined;
     } catch (error) {
       console.error("Ошибка при освобождении ресурсов viewer core:", error);
     }
   };
 
   return {
-    // Реактивные состояния
-    container,
-    components,
-    words,
-    currentWord,
-    workerUrl,
-    isInitialized,
-
-    // Методы
     init,
     dispose,
   };

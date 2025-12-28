@@ -15,9 +15,16 @@
 </template>
 
 <script lang="ts" setup>
-defineProps<{
+import { computed } from "vue";
+
+interface Props {
   progress: number;
-}>();
+}
+
+const props = defineProps<Props>();
+
+// Используем значение напрямую, так как оно уже развернуто в родительском компоненте
+const progress = computed(() => props.progress);
 </script>
 
 <style module lang="scss">

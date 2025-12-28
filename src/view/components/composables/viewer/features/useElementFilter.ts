@@ -1,14 +1,14 @@
-import { ref, watch, type Ref } from "vue";
-import { FragmentsModel } from "@thatopen/fragments";
+import { watch } from "vue";
 import * as FRAGS from "@thatopen/fragments";
+import { FragmentsModel } from "@thatopen/fragments";
 import { useDataAccess } from "../data/useDataAccess";
 import * as OBC from "@thatopen/components";
-import * as OBF from "@thatopen/components-front";
 import {
   ALL_PLACEMENTS_HIGHLIGHTER_NAME,
-  SELECT_HIGHLIGHTER_NAME,
   SELECT_PLACEMENT_HIGHLIGHTER_NAME,
 } from "./useSelection";
+import { useViewerCoreStore } from "@/stores/useViewerCoreStore";
+import { useEmployeeStore } from "@/stores/employee";
 
 /**
  * Тип данных элемента
@@ -28,32 +28,28 @@ export interface ElementData {
  * Отвечает за фильтрацию элементов по различным критериям
  * @param model - реактивная ссылка на текущую модель (управляется через useModelManager)
  */
-export const useElementFilter = (
-  model: Ref<FragmentsModel | undefined>,
-  highlighter: OBF.Highlighter | undefined,
-  mainSelector: {
-    draw: (modelIdMap: OBC.ModelIdMap) => void;
-    clear: () => void;
-  }
-) => {
+export const useElementFilter = () => {
+  const store = useViewerCoreStore();
   const { formatItemPsets } = useDataAccess();
-  const filteredElements = ref<ElementData[]>([]);
-  const selectedTableId = ref<number | null>(null);
-
-  const isLoadingElements = ref(false);
+  const employeeStore = useEmployeeStore();
 
   watch(
-    selectedTableId,
+    () => store.features.elementFilter.selectedTableId.value,
     () => {
-      if (!model?.value || !highlighter) {
+      if (
+        !store.modelManager.model.value ||
+        !store.features.selection.highlighter.value
+      ) {
         return;
       }
       const modelIdMap: OBC.ModelIdMap = {
-        [model.value.modelId]: new Set(
-          filteredElements.value.map((item) => item.LocalId)
+        [store.modelManager.model.value.modelId]: new Set(
+          store.features.elementFilter.filteredElements.value.map(
+            (item: ElementData) => item.LocalId
+          )
         ),
       };
-      highlighter.highlightByID(
+      store.features.selection.highlighter.value.highlightByID(
         ALL_PLACEMENTS_HIGHLIGHTER_NAME,
         modelIdMap,
         true
@@ -62,24 +58,11 @@ export const useElementFilter = (
     { immediate: true }
   );
 
-  if (highlighter) {
-    highlighter.events[SELECT_PLACEMENT_HIGHLIGHTER_NAME].onHighlight.add(
-      (map) => {
-        console.log("selectPlacement highlighted:", map);
-        mainSelector.clear();
-        mainSelector.draw(map);
-      }
-    );
-
-    highlighter.events[ALL_PLACEMENTS_HIGHLIGHTER_NAME].onHighlight.add(
-      (map) => {
-        console.log("allPlacements highlighted:", map);
-      }
-    );
-  }
-
   const selectTable = async (localId: number) => {
-    if (!model.value || !highlighter) {
+    if (
+      !store.modelManager.model.value ||
+      !store.features.selection.highlighter.value
+    ) {
       console.warn("Модель, камера или components не инициализированы");
       return;
     }
@@ -88,13 +71,13 @@ export const useElementFilter = (
     await clearSelection();
 
     // Устанавливаем новый выбранный стол
-    selectedTableId.value = localId;
+    store.features.elementFilter.selectedTableId.value = localId;
 
     const modelIdMap: OBC.ModelIdMap = {
-      [model.value.modelId]: new Set([localId]),
+      [store.modelManager.model.value.modelId]: new Set([localId]),
     };
 
-    highlighter.highlightByID(
+    store.features.selection.highlighter.value.highlightByID(
       SELECT_PLACEMENT_HIGHLIGHTER_NAME,
       modelIdMap,
       true,
@@ -113,57 +96,78 @@ export const useElementFilter = (
    * Очищает выбор стола: удаляет маркер и highlight
    */
   const clearSelection = async () => {
-    selectedTableId.value = null;
+    store.features.elementFilter.selectedTableId.value = null;
   };
 
   const showPreview = (localId: number) => {
-    if (!model.value || !highlighter) {
+    if (
+      !store.modelManager.model.value ||
+      !store.features.selection.highlighter.value
+    ) {
       console.warn("Модель, камера или components не инициализированы");
       return;
     }
-    mainSelector.draw({
-      [model.value.modelId]: new Set([localId]),
+    store.features.selection.mainOutliner.value?.addItems({
+      [store.modelManager.model.value.modelId]: new Set([localId]),
     });
   };
 
   const clearPreview = () => {
-    if (!model.value || !highlighter) {
+    if (
+      !store.modelManager.model.value ||
+      !store.features.selection.highlighter.value
+    ) {
       console.warn("Модель, камера или components не инициализированы");
       return;
     }
-    mainSelector.clear();
+    store.features.selection.mainOutliner.value?.clean();
   };
   /**
    * Загружает элементы IFCFURNISHINGELEMENT с фильтром по наличию непустого свойства Comments
    * Использует текущую модель из переданной зависимости
    */
   const loadFilteredElements = async () => {
-    const currentModel = model.value;
+    const currentModel = store.modelManager.model.value;
+    console.log(
+      `[useElementFilter.loadFilteredElements] Начало. isLoading: ${
+        store.modelManager.isLoading.value
+      }, модель: ${currentModel ? "есть" : "нет"}`
+    );
     if (!currentModel) {
-      console.warn(
-        "Модель не загружена. Невозможно загрузить отфильтрованные элементы."
+      console.warn("Модель не загружена, невозможно загрузить элементы");
+      // ВАЖНО: убеждаемся, что isLoading не остается true
+      console.log(
+        `[useElementFilter.loadFilteredElements] Сбрасываем isLoading (нет модели): ${store.modelManager.isLoading.value} -> false`
       );
+      store.setIsLoading(false);
       return;
     }
 
     try {
-      isLoadingElements.value = true;
-      filteredElements.value = [];
+      console.log(
+        `[useElementFilter.loadFilteredElements] Устанавливаем isLoading: ${store.modelManager.isLoading.value} -> true`
+      );
+      store.setIsLoading(true);
+      store.setLoadingProgress(0);
+      store.features.elementFilter.filteredElements.value = [];
 
       // Получаем элементы категории IFCFURNISHINGELEMENT
-      const furnishingItems = await currentModel.getItemsOfCategories([
+      const furnishingItems = await currentModel?.getItemsOfCategories?.([
         /IFCFURNISHINGELEMENT/,
       ]);
-      const furnishingIds = Object.values(furnishingItems).flat();
+      const furnishingIds = Object.values(furnishingItems ?? {}).flat();
 
       if (furnishingIds.length === 0) {
-        filteredElements.value = [];
-        isLoadingElements.value = false;
+        store.features.elementFilter.filteredElements.value = [];
+        console.log(
+          `[useElementFilter.loadFilteredElements] Сбрасываем isLoading (пустой список): ${store.modelManager.isLoading.value} -> false`
+        );
+        store.setIsLoading(false);
         return;
       }
 
       // Получаем данные элементов с property sets
-      const itemsData = await currentModel.getItemsData(furnishingIds, {
+      const itemsData = await currentModel?.getItemsData?.(furnishingIds, {
         attributesDefault: true,
         relations: {
           IsDefinedBy: { attributes: true, relations: true },
@@ -173,12 +177,12 @@ export const useElementFilter = (
 
       const filtered: ElementData[] = [];
 
-      for (let i = 0; i < itemsData.length; i++) {
-        const itemData = itemsData[i];
+      for (let i = 0; i < (itemsData?.length ?? 0); i++) {
+        const itemData = itemsData?.[i];
         const localId = furnishingIds[i];
 
         // Проверяем наличие свойства Comments с непустым значением
-        if (itemData.IsDefinedBy && Array.isArray(itemData.IsDefinedBy)) {
+        if (itemData?.IsDefinedBy && Array.isArray(itemData?.IsDefinedBy)) {
           const psets = itemData.IsDefinedBy as FRAGS.ItemData[];
           // Используем готовую функцию для форматирования Property Sets
           const formattedPsets = formatItemPsets(psets);
@@ -251,24 +255,30 @@ export const useElementFilter = (
       }
 
       const modelIdMap: OBC.ModelIdMap = {
-        [currentModel.modelId]: new Set(filtered.map((item) => item.LocalId)),
+        [currentModel?.modelId ?? 0]: new Set(
+          filtered.map((item) => item.LocalId)
+        ),
       };
 
-      if (highlighter) {
-        highlighter.highlightByID(
+      if (store.features.selection.highlighter.value) {
+        store.features.selection.highlighter.value.highlightByID(
           ALL_PLACEMENTS_HIGHLIGHTER_NAME,
           modelIdMap,
           true
         );
       }
 
-      filteredElements.value = filtered;
+      store.features.elementFilter.filteredElements.value = filtered;
       console.log(`Загружено элементов: ${filtered.length}`);
     } catch (error) {
       console.error("Ошибка при загрузке элементов:", error);
-      filteredElements.value = [];
+      store.features.elementFilter.filteredElements.value = [];
     } finally {
-      isLoadingElements.value = false;
+      // ВАЖНО: всегда сбрасываем isLoading, даже при ошибке
+      console.log(
+        `[useElementFilter.loadFilteredElements] Сбрасываем isLoading в finally: ${store.modelManager.isLoading.value} -> false`
+      );
+      store.setIsLoading(false);
     }
   };
 
@@ -339,17 +349,43 @@ export const useElementFilter = (
    * Очищает отфильтрованные элементы
    */
   const clear = () => {
-    filteredElements.value = [];
-    isLoadingElements.value = false;
+    store.features.elementFilter.filteredElements.value = [];
+    store.setIsLoading(false);
+  };
+
+  /**
+   * Получает номер места из Comments элемента
+   * @param element - элемент данных
+   * @returns Номер места или null
+   */
+  const getPlacementNumber = (element: ElementData): string | null => {
+    return element.Comments || null;
+  };
+
+  /**
+   * Проверяет, занято ли место сотрудником
+   * @param element - элемент данных
+   * @returns true, если место занято, иначе false
+   */
+  const isPlacementOccupied = (element: ElementData): boolean => {
+    const placementNumber = getPlacementNumber(element);
+    if (!placementNumber) return false;
+    const employee = employeeStore.getEmployeeByPlacementId(placementNumber);
+    return employee !== undefined;
+  };
+
+  /**
+   * Получает информацию о сотруднике, занявшем место
+   * @param element - элемент данных
+   * @returns Данные сотрудника или null, если место свободно
+   */
+  const getEmployeeByPlacement = (element: ElementData) => {
+    const placementNumber = getPlacementNumber(element);
+    if (!placementNumber) return null;
+    return employeeStore.getEmployeeByPlacementId(placementNumber);
   };
 
   return {
-    // Реактивные состояния
-    filteredElements,
-    isLoadingElements,
-    selectedTableId,
-
-    // Методы
     loadFilteredElements,
     filterByCategory,
     clear,
@@ -359,5 +395,10 @@ export const useElementFilter = (
 
     showPreview,
     clearPreview,
+
+    // Методы работы с сотрудниками и местами
+    getPlacementNumber,
+    isPlacementOccupied,
+    getEmployeeByPlacement,
   };
 };

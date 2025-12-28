@@ -1,99 +1,139 @@
 <script lang="ts" setup>
-import { reactive, onMounted, onUnmounted, computed } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useViewer } from "../composables/viewer";
 import LoadingScreen from "./LoadingScreen.vue";
-import Clipper3dSidebar from "./Clipper3dSidebar.vue";
 import ElementsSidebar from "./ElementsSidebar.vue";
 
-const container = reactive<{ value: HTMLDivElement | undefined }>({
-  value: undefined,
-});
-
+const containerRef = ref<HTMLDivElement | null>(null);
 const viewer = useViewer();
-const {
+
+// Используем ref напрямую из viewer - они уже реактивные
+// computed отслеживает изменения ref автоматически при чтении .value
+const isLoading = computed(() => {
+  // Явно читаем значение для реактивности
+  return viewer.isLoading.value;
+});
+const loadingProgress = computed(() => {
+  // Явно читаем значение для реактивности
+  return viewer.loadingProgress.value;
+});
+
+const isModelLoaded = computed(() => {
+  const value = viewer.isModelLoaded;
+  return typeof value === "object" && value !== null
+    ? value.value
+    : Boolean(value);
+});
+
+watch(
   isLoading,
+  (newVal, oldVal) => {
+    console.log(
+      `[TestingViewport] isLoading изменился: ${oldVal} -> ${newVal}`
+    );
+  },
+  { immediate: true }
+);
+
+watch(
   loadingProgress,
-  handleFileChange,
-  setupViewer,
-  disposeViewer,
-  filteredElements,
-  isLoadingElements,
-  selectEmployeePlacement: zoomToElement,
-  elementFilterState,
-  levelsData,
-  isLoadingLevels,
-  toggleLevelClip,
-} = viewer;
+  (newVal, oldVal) => {
+    console.log(
+      `[TestingViewport] loadingProgress изменился: ${oldVal} -> ${newVal}`
+    );
+  },
+  { immediate: true }
+);
 
-const modelIsLoaded = computed(() => {
-  return viewer.loadedModel.value !== undefined;
-});
-
-/**
- * Получает ID выбранного элемента из tableSelectionState
- */
-const selectedElementId = computed(() => {
-  return elementFilterState.value?.selectedTableId.value ?? undefined;
-});
-
-/**
- * Обработчик нажатия клавиш
- */
 const handleKeyDown = (event: KeyboardEvent) => {
-  // ESC - очистить выбор стола
   if (event.key === "Escape") {
-    elementFilterState.value?.clearSelection();
+    viewer.elementFilter.clearSelection();
   }
 };
 
+/**
+ * Обработчик наведения на элемент
+ */
 const handleElementMouseEnter = (localId: number) => {
-  elementFilterState.value?.showPreview(localId);
+  viewer.elementFilter.showPreview(localId);
 };
 
-const handleElementMouseLeave = (localId: number) => {
-  elementFilterState.value?.clearPreview();
+/**
+ * Обработчик ухода с элемента
+ */
+const handleElementMouseLeave = () => {
+  viewer.elementFilter.clearPreview();
 };
 
+/**
+ * Инициализация viewer при монтировании компонента
+ */
 onMounted(async () => {
-  if (!container.value) return;
-  await setupViewer(container.value);
+  console.log(
+    `[TestingViewport.onMounted] Начало. isLoading: ${isLoading.value}, loadingProgress: ${loadingProgress.value}`
+  );
+  if (!containerRef.value) {
+    console.error("Container element не найден");
+    return;
+  }
 
-  // Добавляем обработчик клавиатуры
-  window.addEventListener("keydown", handleKeyDown);
+  try {
+    console.log("[TestingViewport.onMounted] Вызываем setupViewer");
+    await viewer.setupViewer(containerRef.value);
+    console.log(
+      `[TestingViewport.onMounted] После setupViewer. isLoading: ${isLoading.value}, loadingProgress: ${loadingProgress.value}`
+    );
+    window.addEventListener("keydown", handleKeyDown);
+  } catch (error) {
+    console.error("Ошибка при инициализации viewer:", error);
+  }
 });
 
+/**
+ * Очистка ресурсов при размонтировании
+ */
 onUnmounted(() => {
-  // Удаляем обработчик клавиатуры
   window.removeEventListener("keydown", handleKeyDown);
-  disposeViewer();
+  viewer.disposeViewer();
 });
 </script>
 
 <template>
-  <div :class="$style.root" tabindex="0" @keydown="handleKeyDown">
+  <div :class="$style.root" tabindex="0">
+    <!-- Экран загрузки модели (показывается только при активной загрузке) -->
     <LoadingScreen v-if="isLoading" :progress="loadingProgress" />
+
     <div :class="$style.layout">
-      <Clipper3dSidebar
-        :levels-data="levelsData"
-        :is-loading-levels="isLoadingLevels"
+      <!-- Сайдбар для управления клиппингом уровней -->
+      <!-- <Clipper3dSidebar
+        :levels-data="viewer.levelsData"
+        :is-loading-levels="viewer.isLoadingLevels"
         :class="$style.sidebar"
-        @toggleLevelClip="toggleLevelClip"
-      />
+        @toggleLevelClip="viewer.toggleLevelClip"
+      /> -->
+
+      <!-- Основной контент -->
       <div :class="$style.mainContent">
+        <!-- Панель инструментов -->
         <div :class="$style.toolbar">
-          Toolbar
-          <input v-if="!modelIsLoaded" type="file" @change="handleFileChange" />
+          <span :class="$style.toolbarTitle">3D Viewer</span>
+          <input
+            v-if="!isModelLoaded"
+            type="file"
+            accept=".ifc"
+            @change="viewer.handleFileChange"
+            :class="$style.fileInput"
+          />
         </div>
 
-        <div
-          :ref="(el) => { container.value = el as HTMLDivElement }"
-          :class="$style.viewport"
-        >
+        <!-- Viewport для 3D сцены -->
+        <div ref="containerRef" :class="$style.viewport">
+          <!-- Сайдбар с элементами (рабочие места) -->
           <ElementsSidebar
-            :elements="filteredElements"
-            :isLoading="isLoadingElements"
-            :selectedElementId="selectedElementId"
-            @element-click="zoomToElement"
+            :elements="viewer.filteredElements"
+            :isLoading="viewer.isLoadingElements"
+            :selectedElementId="viewer.selectedTableId"
+            @element-click="viewer.selectEmployeePlacement"
             @element-mouse-enter="handleElementMouseEnter"
             @element-mouse-leave="handleElementMouseLeave"
             :class="$style.elementsSidebar"
@@ -113,6 +153,7 @@ onUnmounted(() => {
   min-height: 400px;
   position: relative;
   overflow: hidden;
+  background: #f5f5f5;
 }
 
 .layout {
@@ -129,8 +170,12 @@ onUnmounted(() => {
 }
 
 .elementsSidebar {
-  flex-shrink: 0;
-  height: 100%;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  pointer-events: auto;
 }
 
 .mainContent {
@@ -140,84 +185,68 @@ onUnmounted(() => {
   min-width: 0;
   height: 100%;
   overflow: hidden;
-}
-
-.infoPanel {
-  background-color: #f8f9fa;
-  padding: 12px;
-  border-bottom: 1px solid #dee2e6;
-  font-size: 12px;
-}
-
-.infoSection {
-  margin-bottom: 8px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.infoLabel {
-  font-weight: 600;
-  color: #495057;
-  margin-bottom: 4px;
-}
-
-.infoValue {
-  color: #212529;
-  padding-left: 12px;
-
-  div {
-    margin-bottom: 4px;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
-}
-
-.elementDetails {
-  margin-top: 8px;
-  padding: 8px;
-  background-color: #e9ecef;
-  border-radius: 4px;
-  border-left: 3px solid #007bff;
-
-  div {
-    margin-bottom: 4px;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
+  background: #ffffff;
 }
 
 .toolbar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
   height: 50px;
-  background-color: #f0f0f0;
-  padding: 10px;
+  padding: 0 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+
+.toolbarTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  letter-spacing: 0.5px;
+}
+
+.fileInput {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  color: white;
   font-size: 14px;
-  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+
+  &::file-selector-button {
+    padding: 4px 12px;
+    margin-right: 12px;
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 4px;
+    color: white;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.4);
+    }
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.4);
+  }
 }
 
 .viewport {
   position: relative;
-  display: flex;
-  flex-direction: column;
+  flex: 1;
   width: 100%;
   height: 100%;
-  min-height: 400px;
+  min-height: 0;
   overflow: hidden;
-}
-
-.elementsSidebar {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1000;
-  pointer-events: auto;
+  background: #1a1a1a;
 }
 </style>

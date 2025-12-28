@@ -1,15 +1,26 @@
 <script lang="ts" setup>
-import { ref, watch, type ShallowRef } from "vue";
+import { ref, computed, watch, type ShallowRef } from "vue";
 import * as THREE from "three";
 import type { LevelsViewData } from "../composables/viewer/data/useDataAccess";
 import type { useClipStyler } from "../composables/viewer/features/useClip";
 
 interface Props {
-  levelsData: LevelsViewData[];
-  isLoadingLevels: boolean;
+  levelsData: LevelsViewData[] | { value: LevelsViewData[] };
+  isLoadingLevels: boolean | { value: boolean };
 }
 
 const props = defineProps<Props>();
+
+// Разворачиваем ref/computed для использования в компоненте
+const levelsData = computed(() => {
+  const value = props.levelsData;
+  return Array.isArray(value) ? value : value.value;
+});
+
+const isLoadingLevels = computed(() => {
+  const value = props.isLoadingLevels;
+  return typeof value === "boolean" ? value : value.value;
+});
 
 const emit = defineEmits<{
   (e: "toggleLevelClip", levelName: string): void;
@@ -54,11 +65,11 @@ const toggleLevelClip = (levelName: string) => {
     </div>
 
     <div :class="$style.content" v-if="!isCollapsed">
-      <div v-if="props.isLoadingLevels" :class="$style.loadingState">
+      <div v-if="isLoadingLevels" :class="$style.loadingState">
         <p :class="$style.loadingText">Загрузка уровней...</p>
       </div>
 
-      <div v-else-if="props.levelsData.length === 0" :class="$style.emptyState">
+      <div v-else-if="levelsData.length === 0" :class="$style.emptyState">
         <p :class="$style.emptyText">Нет доступных уровней</p>
         <p :class="$style.emptyHint">
           Загрузите IFC модель с этажами (IfcBuildingStorey)
@@ -67,7 +78,7 @@ const toggleLevelClip = (levelName: string) => {
 
       <div v-else :class="$style.levelsList">
         <div
-          v-for="level in props.levelsData"
+          v-for="level in levelsData"
           :key="level.name"
           :class="[$style.levelItem]"
         >
@@ -121,7 +132,7 @@ const toggleLevelClip = (levelName: string) => {
     <div :class="$style.footer" v-if="!isCollapsed">
       <div :class="$style.footerInfo">
         <span :class="$style.footerText">
-          Всего уровней: {{ props.levelsData.length }}
+          Всего уровней: {{ levelsData.length }}
         </span>
       </div>
     </div>
