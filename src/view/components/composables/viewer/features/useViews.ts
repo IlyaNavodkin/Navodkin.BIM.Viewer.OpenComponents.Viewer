@@ -1,17 +1,28 @@
-import { computed, ref, shallowRef } from "vue";
+import { computed, ref, shallowRef, type Ref } from "vue";
 import * as OBC from "@thatopen/components";
 import * as THREE from "three";
-import { LevelsViewData } from "./useDataAccess";
+import { LevelsViewData } from "../data/useDataAccess";
 
+/**
+ * Фича для управления видами
+ * Отвечает за создание и управление видами (views) модели
+ */
 export const useViews = (
-  components: OBC.Components | undefined,
-  world: OBC.World | undefined
+  components: Ref<OBC.Components | undefined>,
+  currentWord: Ref<
+    | OBC.SimpleWorld<OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer>
+    | undefined
+  >
 ) => {
-  if (!components || !world)
-    throw new Error("Components or world is not exists");
+  if (!components.value || !currentWord.value) {
+    throw new Error("Components и currentWord должны быть инициализированы");
+  }
+
+  const componentsValue = components.value;
+  const world = currentWord.value;
 
   const views = shallowRef<OBC.Views | undefined>(undefined);
-  views.value = components.get(OBC.Views);
+  views.value = componentsValue.get(OBC.Views);
   views.value.world = world;
 
   // Реактивный триггер для принудительного обновления computed при изменении views.list

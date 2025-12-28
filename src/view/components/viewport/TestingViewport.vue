@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { reactive, onMounted, onUnmounted, computed } from "vue";
-import { useViewer } from "../composables/useViewer";
+import { useViewer } from "../composables/viewer";
 import LoadingScreen from "./LoadingScreen.vue";
 import Clipper3dSidebar from "./Clipper3dSidebar.vue";
 import ElementsSidebar from "./ElementsSidebar.vue";
@@ -19,7 +19,7 @@ const {
   filteredElements,
   isLoadingElements,
   selectEmployeePlacement: zoomToElement,
-  tableSelectionState,
+  elementFilterState,
   levelsData,
   isLoadingLevels,
   toggleLevelClip,
@@ -30,13 +30,28 @@ const modelIsLoaded = computed(() => {
 });
 
 /**
+ * Получает ID выбранного элемента из tableSelectionState
+ */
+const selectedElementId = computed(() => {
+  return elementFilterState.value?.selectedTableId.value ?? undefined;
+});
+
+/**
  * Обработчик нажатия клавиш
  */
 const handleKeyDown = (event: KeyboardEvent) => {
   // ESC - очистить выбор стола
   if (event.key === "Escape") {
-    tableSelectionState.value?.clearSelection();
+    elementFilterState.value?.clearSelection();
   }
+};
+
+const handleElementMouseEnter = (localId: number) => {
+  elementFilterState.value?.showPreview(localId);
+};
+
+const handleElementMouseLeave = (localId: number) => {
+  elementFilterState.value?.clearPreview();
 };
 
 onMounted(async () => {
@@ -73,14 +88,18 @@ onUnmounted(() => {
         <div
           :ref="(el) => { container.value = el as HTMLDivElement }"
           :class="$style.viewport"
-        ></div>
+        >
+          <ElementsSidebar
+            :elements="filteredElements"
+            :isLoading="isLoadingElements"
+            :selectedElementId="selectedElementId"
+            @element-click="zoomToElement"
+            @element-mouse-enter="handleElementMouseEnter"
+            @element-mouse-leave="handleElementMouseLeave"
+            :class="$style.elementsSidebar"
+          />
+        </div>
       </div>
-      <ElementsSidebar
-        :elements="filteredElements"
-        :isLoading="isLoadingElements"
-        @element-click="zoomToElement"
-        :class="$style.elementsSidebar"
-      />
     </div>
   </div>
 </template>
@@ -191,5 +210,14 @@ onUnmounted(() => {
   height: 100%;
   min-height: 400px;
   overflow: hidden;
+}
+
+.elementsSidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  pointer-events: auto;
 }
 </style>

@@ -1,24 +1,35 @@
-import { shallowRef } from "vue";
+import { shallowRef, type Ref } from "vue";
 import * as OBC from "@thatopen/components";
 import * as THREE from "three";
 import * as OBF from "@thatopen/components-front";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 
+/**
+ * Фича для клиппинга
+ * Отвечает за создание и управление плоскостями клиппинга
+ */
 export const useClipStyler = (
-  components: OBC.Components | undefined,
-  world: OBC.World | undefined
+  components: Ref<OBC.Components | undefined>,
+  currentWord: Ref<
+    | OBC.SimpleWorld<OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer>
+    | undefined
+  >
 ) => {
-  if (!components || !world)
-    throw new Error("Components or world is not exists");
+  if (!components.value || !currentWord.value) {
+    throw new Error("Components и currentWord должны быть инициализированы");
+  }
+
+  const componentsValue = components.value;
+  const world = currentWord.value;
 
   const clipper = shallowRef<OBC.Clipper | undefined>(undefined);
-  clipper.value = components.get(OBC.Clipper);
+  clipper.value = componentsValue.get(OBC.Clipper);
   clipper.value.enabled = true;
   // Скрываем визуальные элементы клиппера (плоскости и хелперы)
   clipper.value.visible = false;
 
   const clipStyler = shallowRef<OBF.ClipStyler | undefined>(undefined);
-  clipStyler.value = components.get(OBF.ClipStyler);
+  clipStyler.value = componentsValue.get(OBF.ClipStyler);
   clipStyler.value.world = world;
 
   // Инициализация стиля с черным заполнением один раз внутри композабла
@@ -76,3 +87,4 @@ export const useClipStyler = (
     clearAll,
   };
 };
+

@@ -1,19 +1,29 @@
-import { computed, ref, shallowRef } from "vue";
+import { shallowRef, type Ref } from "vue";
 import * as OBC from "@thatopen/components";
 import * as THREE from "three";
-import { LevelsViewData } from "./useDataAccess";
 import * as OBF from "@thatopen/components-front";
 
+/**
+ * Фича для маркеров
+ * Отвечает за создание и управление маркерами в 3D пространстве
+ */
 export const useMarkers = (
-  components: OBC.Components | undefined,
-  world: OBC.World | undefined
+  components: Ref<OBC.Components | undefined>,
+  currentWord: Ref<
+    | OBC.SimpleWorld<OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer>
+    | undefined
+  >
 ) => {
-  if (!components || !world)
-    throw new Error("Components or world is not exists");
+  if (!components.value || !currentWord.value) {
+    throw new Error("Components и currentWord должны быть инициализированы");
+  }
+
+  const componentsValue = components.value;
+  const world = currentWord.value;
 
   const marker = shallowRef<OBF.Marker | undefined>(undefined);
 
-  marker.value = components.get(OBF.Marker);
+  marker.value = componentsValue.get(OBF.Marker);
   marker.value.threshold = 1;
   marker.value.enabled = true;
 
@@ -34,3 +44,4 @@ export const useMarkers = (
   };
   return { createMarkerInPoint, marker, removeMarker };
 };
+

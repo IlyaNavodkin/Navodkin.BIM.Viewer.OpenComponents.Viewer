@@ -1,23 +1,33 @@
 <script lang="ts" setup>
 import { computed, ref } from "vue";
-import type { ElementData } from "../composables/useViewer";
+import type { ElementData } from "../composables/viewer";
+import { useEmployeeStore } from "../../../stores/employee";
 
 interface Props {
   elements: ElementData[];
   isLoading?: boolean;
+  selectedElementId?: number | null;
 }
 
 const emit = defineEmits<{
   elementClick: [localId: number];
+  elementMouseEnter: [localId: number];
+  elementMouseLeave: [localId: number];
 }>();
 
 const props = withDefaults(defineProps<Props>(), {
   isLoading: false,
+  selectedElementId: null,
 });
+
+// Store для работы с сотрудниками
+const employeeStore = useEmployeeStore();
 
 // Состояние сворачивания сайдбара
 const isCollapsed = ref(false);
 const searchQuery = ref("");
+const selectedLevel = ref<string | null>(null);
+const hideFree = ref(false);
 
 /**
  * Переключает состояние сворачивания сайдбара
@@ -26,27 +36,100 @@ const toggleCollapse = () => {
   isCollapsed.value = !isCollapsed.value;
 };
 
-// Фильтруем элементы по поисковому запросу
-const filteredElements = computed(() => {
-  if (!searchQuery.value.trim()) {
-    return props.elements;
-  }
-
-  const query = searchQuery.value.toLowerCase().trim();
-  return props.elements.filter((element) => {
-    const name = element.Name?.toLowerCase() || "";
-    const tag = element.Tag?.toLowerCase() || "";
-    const objectType = element.ObjectType?.toLowerCase() || "";
-    return (
-      name.includes(query) || tag.includes(query) || objectType.includes(query)
-    );
-  });
-});
-
 // Очистка поиска
 const clearSearch = () => {
   searchQuery.value = "";
 };
+
+/**
+ * Получает список уникальных уровней из элементов
+ */
+const availableLevels = computed(() => {
+  const levels = new Set<string>();
+  props.elements.forEach((element) => {
+    if (element.Level) {
+      levels.add(element.Level);
+    }
+  });
+  return Array.from(levels).sort();
+});
+
+/**
+ * Сравнивает два значения для сортировки (числовая или строковая)
+ */
+const compareValues = (a: string | null, b: string | null): number => {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+
+  // Пытаемся извлечь числа из строк
+  const numA = parseFloat(a.trim());
+  const numB = parseFloat(b.trim());
+
+  // Если оба значения - числа, сортируем численно
+  if (!isNaN(numA) && !isNaN(numB)) {
+    return numA - numB;
+  }
+
+  // Иначе сортируем строково
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+};
+
+// Фильтруем элементы по поисковому запросу и выбранному уровню
+const filteredElements = computed(() => {
+  let filtered = props.elements;
+
+  // Фильтрация по уровню
+  if (selectedLevel.value) {
+    filtered = filtered.filter(
+      (element) => element.Level === selectedLevel.value
+    );
+  }
+
+  // Фильтрация по статусу занятости (скрыть свободные)
+  if (hideFree.value) {
+    filtered = filtered.filter((element) => isPlacementOccupied(element));
+  }
+
+  // Фильтрация по поисковому запросу
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase().trim();
+    filtered = filtered.filter((element) => {
+      const name = element.Name?.toLowerCase() || "";
+      const tag = element.Tag?.toLowerCase() || "";
+      const objectType = element.ObjectType?.toLowerCase() || "";
+      const comments = element.Comments?.toLowerCase() || "";
+      const level = element.Level?.toLowerCase() || "";
+      const placementNumber = getPlacementNumber(element)?.toLowerCase() || "";
+      const employee = getEmployeeByPlacement(element);
+      const employeeName = employee?.name?.toLowerCase() || "";
+
+      return (
+        name.includes(query) ||
+        tag.includes(query) ||
+        objectType.includes(query) ||
+        comments.includes(query) ||
+        level.includes(query) ||
+        placementNumber.includes(query) ||
+        employeeName.includes(query)
+      );
+    });
+  }
+
+  // Сортировка: сначала по Level, затем по Comments (номеру места)
+  filtered = [...filtered].sort((a, b) => {
+    // Сначала сортируем по Level
+    const levelCompare = compareValues(a.Level, b.Level);
+    if (levelCompare !== 0) {
+      return levelCompare;
+    }
+
+    // Если Level одинаковый или оба null, сортируем по Comments
+    return compareValues(a.Comments, b.Comments);
+  });
+
+  return filtered;
+});
 
 /**
  * Обработчик клика на элемент
@@ -54,13 +137,57 @@ const clearSearch = () => {
 const handleElementClick = (element: ElementData) => {
   emit("elementClick", element.LocalId);
 };
+
+/**
+ * Проверяет, является ли элемент выбранным
+ */
+const isElementSelected = (element: ElementData): boolean => {
+  return (
+    props.selectedElementId !== null &&
+    props.selectedElementId === element.LocalId
+  );
+};
+
+/**
+ * Получает номер места из Comments
+ */
+const getPlacementNumber = (element: ElementData): string | null => {
+  return element.Comments || null;
+};
+
+/**
+ * Проверяет, занято ли место
+ */
+const isPlacementOccupied = (element: ElementData): boolean => {
+  const placementNumber = getPlacementNumber(element);
+  if (!placementNumber) return false;
+  const employee = employeeStore.getEmployeeByPlacementId(placementNumber);
+  return employee !== undefined;
+};
+
+/**
+ * Получает информацию о сотруднике, занявшем место
+ */
+const getEmployeeByPlacement = (element: ElementData) => {
+  const placementNumber = getPlacementNumber(element);
+  if (!placementNumber) return null;
+  return employeeStore.getEmployeeByPlacementId(placementNumber);
+};
+
+const handleMouseEnter = (element: ElementData) => {
+  emit("elementMouseEnter", element.LocalId);
+};
+
+const handleMouseLeave = (element: ElementData) => {
+  emit("elementMouseLeave", element.LocalId);
+};
 </script>
 
 <template>
   <div :class="[$style.sidebar, { [$style.collapsed]: isCollapsed }]">
     <div :class="$style.header">
       <div :class="$style.headerTop">
-        <h3 :class="$style.title" v-if="!isCollapsed">Элементы</h3>
+        <h3 :class="$style.title" v-if="!isCollapsed">Рабочие места</h3>
         <button
           :class="$style.collapseButton"
           @click="toggleCollapse"
@@ -79,31 +206,47 @@ const handleElementClick = (element: ElementData) => {
           </svg>
         </button>
       </div>
-      <div v-if="!isCollapsed" :class="$style.searchContainer">
-        <input
-          :class="$style.searchInput"
-          type="text"
-          placeholder="Поиск по имени..."
-          v-model="searchQuery"
-        />
-        <button
-          v-if="searchQuery"
-          :class="$style.clearButton"
-          @click="clearSearch"
-          title="Очистить поиск"
+      <div v-if="!isCollapsed" :class="$style.filtersContainer">
+        <select
+          :class="$style.levelSelect"
+          v-model="selectedLevel"
+          title="Фильтр по этажу"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+          <option :value="null">Все этажи</option>
+          <option v-for="level in availableLevels" :key="level" :value="level">
+            {{ level }}
+          </option>
+        </select>
+        <label :class="$style.checkboxLabel">
+          <input type="checkbox" v-model="hideFree" :class="$style.checkbox" />
+          <span :class="$style.checkboxText">Скрыть свободные</span>
+        </label>
+        <div :class="$style.searchContainer">
+          <input
+            :class="$style.searchInput"
+            type="text"
+            placeholder="Поиск по месту, номеру, сотруднику..."
+            v-model="searchQuery"
+          />
+          <button
+            v-if="searchQuery"
+            :class="$style.clearButton"
+            @click="clearSearch"
+            title="Очистить поиск"
           >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -125,42 +268,41 @@ const handleElementClick = (element: ElementData) => {
         <div
           v-for="element in filteredElements"
           :key="element.LocalId"
-          :class="$style.elementItem"
+          :class="[
+            $style.elementItem,
+            { [$style.elementItemActive]: isElementSelected(element) },
+          ]"
           @click="handleElementClick(element)"
+          @mouseenter="handleMouseEnter(element)"
+          @mouseleave="handleMouseLeave(element)"
         >
-          <div :class="$style.elementIcon">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M3 9h18M9 3v18" />
-            </svg>
-          </div>
           <div :class="$style.elementInfo">
             <div :class="$style.elementName">
-              {{ element.Name || `Element ${element.LocalId}` }}
+              Место #
+              {{ getPlacementNumber(element) || `Element ${element.LocalId}` }}
             </div>
-            <div :class="$style.elementMeta">
-              <span v-if="element.Tag" :class="$style.elementTag">
-                Tag: {{ element.Tag }}
-              </span>
-              <span v-if="element.ObjectType" :class="$style.elementType">
-                Type: {{ element.ObjectType }}
-              </span>
+            <div
+              v-if="isPlacementOccupied(element)"
+              :class="$style.employeeInfo"
+            >
+              <div :class="$style.employeeAvatar">
+                <img
+                  :src="getEmployeeByPlacement(element)?.previewUrlAvatar"
+                  :alt="getEmployeeByPlacement(element)?.name"
+                />
+              </div>
+              <div :class="$style.employeeDetails">
+                <div :class="$style.employeeName">
+                  {{ getEmployeeByPlacement(element)?.name }}
+                </div>
+                <div :class="$style.employeeStatus">Занято</div>
+              </div>
+            </div>
+            <div v-else :class="$style.placementStatus">
+              <span :class="$style.statusFree">Свободно</span>
             </div>
             <div :class="$style.elementDetails">
               <span :class="$style.elementId">ID: {{ element.LocalId }}</span>
-              <span v-if="element.Category" :class="$style.elementCategory">
-                Category: {{ element.Category }}
-              </span>
-              <span v-if="element.Comments" :class="$style.elementComments">
-                Comments: {{ element.Comments }}
-              </span>
             </div>
           </div>
         </div>
@@ -171,7 +313,9 @@ const handleElementClick = (element: ElementData) => {
       <div :class="$style.footerInfo">
         <span :class="$style.footerText">
           Всего: {{ filteredElements.length }}
-          <span v-if="searchQuery"> из {{ props.elements.length }} </span>
+          <span v-if="searchQuery || selectedLevel || hideFree">
+            из {{ props.elements.length }}
+          </span>
         </span>
       </div>
     </div>
@@ -252,6 +396,77 @@ const handleElementClick = (element: ElementData) => {
   .rotated {
     transform: rotate(180deg);
   }
+}
+
+.filtersContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.levelSelect {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='white' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+
+  option {
+    background: #667eea;
+    color: white;
+  }
+
+  &:focus {
+    outline: none;
+    background-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+  }
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: white;
+  flex-shrink: 0;
+}
+
+.checkboxText {
+  font-size: 13px;
+  color: white;
+  font-weight: 500;
 }
 
 .searchContainer {
@@ -392,6 +607,37 @@ const handleElementClick = (element: ElementData) => {
   &:active {
     transform: translateX(-2px);
   }
+
+  &.elementItemActive {
+    background: linear-gradient(
+      135deg,
+      rgba(102, 126, 234, 0.1) 0%,
+      rgba(118, 75, 162, 0.1) 100%
+    );
+    border: 2px solid #667eea;
+    border-left: 4px solid #667eea;
+    box-shadow: 0 2px 12px rgba(102, 126, 234, 0.25);
+
+    &:hover {
+      background: linear-gradient(
+        135deg,
+        rgba(102, 126, 234, 0.15) 0%,
+        rgba(118, 75, 162, 0.15) 100%
+      );
+      border-color: #764ba2;
+      border-left-color: #764ba2;
+    }
+
+    .elementIcon {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .elementName {
+      color: #667eea;
+      font-weight: 700;
+    }
+  }
 }
 
 .elementIcon {
@@ -443,6 +689,67 @@ const handleElementClick = (element: ElementData) => {
   color: #999;
   padding-top: 4px;
   border-top: 1px solid #e0e0e0;
+  margin-top: 8px;
+}
+
+.employeeInfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(102, 126, 234, 0.05);
+  border-radius: 6px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.employeeAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2px solid rgba(102, 126, 234, 0.3);
+  background: #fff;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.employeeDetails {
+  flex: 1;
+  min-width: 0;
+}
+
+.employeeName {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.employeeStatus {
+  font-size: 11px;
+  color: #667eea;
+  font-weight: 500;
+}
+
+.placementStatus {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  display: inline-block;
+}
+
+.statusFree {
+  font-size: 12px;
+  color: #667eea;
+  font-weight: 600;
 }
 
 .elementId,

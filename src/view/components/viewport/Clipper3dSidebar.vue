@@ -1,8 +1,8 @@
 <script lang="ts" setup>
 import { ref, watch, type ShallowRef } from "vue";
 import * as THREE from "three";
-import type { LevelsViewData } from "../composables/useDataAccess";
-import type { useClipStyler } from "../composables/useClip";
+import type { LevelsViewData } from "../composables/viewer/data/useDataAccess";
+import type { useClipStyler } from "../composables/viewer/features/useClip";
 
 interface Props {
   levelsData: LevelsViewData[];
