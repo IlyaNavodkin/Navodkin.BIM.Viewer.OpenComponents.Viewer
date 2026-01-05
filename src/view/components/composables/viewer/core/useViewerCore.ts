@@ -1,69 +1,48 @@
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
 import { PostproductionAspect } from "@thatopen/components-front";
-import { useViewerCoreStore } from "../../../../../stores/useViewerCoreStore";
+import { useIFCViewerStore } from "../../../../../stores/useViewerCoreStore";
 
-export const useViewerCore = () => {
-  const store = useViewerCoreStore();
+export interface IEmployeeViewerCore {
+  init: (containerElement: HTMLDivElement) => Promise<void>;
+  dispose: () => void;
+}
+
+export const useViewerCore = (): IEmployeeViewerCore => {
+  const store = useIFCViewerStore();
 
   const init = async (containerElement: HTMLDivElement) => {
     if (!containerElement) {
       throw new Error("Container element is required");
     }
 
-    // ВАЖНО: убеждаемся, что isLoading сброшен при инициализации
-    console.log(
-      `[useViewerCore.init] Сбрасываем isLoading: ${store.modelManager.isLoading.value} -> false`
-    );
-    store.setIsLoading(false);
-    store.setLoadingProgress(0);
-    console.log(
-      `[useViewerCore.init] После сброса isLoading: ${store.modelManager.isLoading.value}`
-    );
-
-    store.core.container.value = containerElement;
-
-    const componentsInstance = new OBC.Components();
-    store.core.components.value = componentsInstance;
-
-    if (!componentsInstance) {
-      throw new Error("Failed to create Components");
+    if (!store) {
+      throw new Error("Store is not available");
     }
 
-    store.core.words.value = componentsInstance.get(OBC.Worlds);
-    const world = store.core.words.value.create<
+    const components = new OBC.Components();
+    const worlds = components.get(OBC.Worlds);
+    const world = worlds.create<
       OBC.SimpleScene,
       OBC.SimpleCamera,
       OBF.PostproductionRenderer
     >();
-    store.core.currentWord.value = world;
 
-    const containerInstance = store.core.container.value;
-
-    if (!containerInstance) {
-      throw new Error("Container is null");
-    }
-
-    const scene = new OBC.SimpleScene(componentsInstance);
-    const render = new OBF.PostproductionRenderer(
-      componentsInstance,
-      containerInstance
+    world.scene = new OBC.SimpleScene(components);
+    world.renderer = new OBF.PostproductionRenderer(
+      components,
+      containerElement
     );
-    const camera = new OBC.SimpleCamera(componentsInstance);
+    world.camera = new OBC.SimpleCamera(components);
 
-    if (!render || !camera) {
-      throw new Error("Failed to create renderer or camera");
-    }
+    world.scene.setup();
 
-    world.scene = scene;
-    world.renderer = render;
-    world.camera = camera;
+    world.scene.three.background = null;
+    world.renderer.postproduction.enabled = true;
+    world.dynamicAnchor = false;
+    world.renderer.postproduction.style = PostproductionAspect.COLOR;
 
-    scene.setup();
-
-    componentsInstance.init();
-
-    render.postproduction.enabled = true;
+    components.init();
 
     const githubUrl =
       "https://thatopen.github.io/engine_fragment/resources/worker.mjs";
@@ -72,52 +51,53 @@ export const useViewerCore = () => {
     const workerFile = new File([workerBlob], "worker.mjs", {
       type: "text/javascript",
     });
-    const createdWorkerUrl = URL.createObjectURL(workerFile);
-    store.core.workerUrl.value = createdWorkerUrl;
 
-    world.dynamicAnchor = false;
-    render.postproduction.style = PostproductionAspect.COLOR;
+    store.core.workerUrl = URL.createObjectURL(workerFile);
+    store.core.currentWord = world;
+    store.core.components = components;
+    store.core.words = worlds;
+    store.core.container = containerElement;
 
-    componentsInstance.get(OBC.Raycasters).get(world);
+    console.log(store.core.workerUrl);
 
-    console.log("Автоматическое выделение настроено");
+    console.log("Auto selection configured");
   };
 
   const dispose = () => {
     try {
-      if (store.core.workerUrl.value) {
+      if (store.core.workerUrl) {
         try {
-          URL.revokeObjectURL(store.core.workerUrl.value);
+          URL.revokeObjectURL(store.core.workerUrl);
         } catch (error) {
-          console.warn("Ошибка при освобождении worker URL:", error);
+          console.warn("Error disposing worker URL:", error);
         }
-        store.core.workerUrl.value = undefined;
+        store.core.workerUrl = undefined;
       }
 
-      if (store.core.currentWord.value) {
+      if (store.core.currentWord) {
         try {
-          if (typeof store.core.currentWord.value.dispose === "function") {
-            store.core.currentWord.value.dispose();
+          if (typeof store.core.currentWord.dispose === "function") {
+            store.core.currentWord.dispose();
           }
         } catch (error) {
-          console.warn("Ошибка при освобождении world:", error);
+          console.warn("Error disposing world:", error);
         }
       }
 
-      if (store.core.components.value) {
+      if (store.core.components) {
         try {
-          store.core.components.value.dispose();
+          store.core.components.dispose();
         } catch (error) {
-          console.warn("Ошибка при освобождении components:", error);
+          console.warn("Error disposing components:", error);
         }
       }
 
-      store.core.container.value = undefined;
-      store.core.components.value = undefined;
-      store.core.words.value = undefined;
-      store.core.currentWord.value = undefined;
+      store.core.container = undefined;
+      store.core.components = undefined;
+      store.core.words = undefined;
+      store.core.currentWord = undefined;
     } catch (error) {
-      console.error("Ошибка при освобождении ресурсов viewer core:", error);
+      console.error("Error disposing viewer core resources:", error);
     }
   };
 

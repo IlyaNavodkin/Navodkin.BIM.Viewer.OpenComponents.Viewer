@@ -3,13 +3,13 @@
     <div class="header">
       <h1>Vue + Pinia + TypeScript + ThatOpen Components</h1>
       <div class="controls">
-        <button @click="handleGreet">Поприветствовать</button>
-        <button @click="handleGetComponent">Получить компонент</button>
+        <button @click="handleGreet">Greet</button>
+        <button @click="handleGetComponent">Get Component</button>
         <p v-if="message">{{ message }}</p>
       </div>
     </div>
     <div class="viewport-container">
-      <TestingViewport />
+      <EmployeeWorkplaceViewer />
     </div>
   </div>
 </template>
@@ -18,33 +18,29 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import * as OBC from "@thatopen/components";
 import { HelloWorldComponent } from "@/view-models/components";
-import TestingViewport from "@/view/components/viewport/TestingViewport.vue";
+import EmployeeWorkplaceViewer from "@/view/components/viewport/EmployeeWorkplaceViewer.vue";
 
 const message = ref<string>("");
 let components: OBC.Components | null = null;
 let helloWorldComponent: HelloWorldComponent | null = null;
 
 onMounted(async () => {
-  // Создаем экземпляр Components
   components = new OBC.Components();
 
-  // Создаем наш компонент
   helloWorldComponent = new HelloWorldComponent(components);
 
-  // Подписываемся на события обновления
   helloWorldComponent.onBeforeUpdate.add(() => {
-    console.log("Компонент готовится к обновлению");
+    console.log("Component preparing to update");
   });
 
   helloWorldComponent.onAfterUpdate.add(() => {
-    console.log("Компонент обновлен");
+    console.log("Component updated");
   });
 
-  message.value = "Компонент HelloWorld создан и зарегистрирован!";
+  message.value = "HelloWorld component created and registered!";
 });
 
 onUnmounted(() => {
-  // Освобождаем ресурсы при размонтировании компонента Vue
   if (helloWorldComponent) {
     helloWorldComponent.dispose();
   }
@@ -55,18 +51,17 @@ onUnmounted(() => {
 
 const handleGreet = () => {
   if (helloWorldComponent) {
-    helloWorldComponent.greet("Разработчик");
-    message.value = "Проверьте консоль браузера!";
+    helloWorldComponent.greet("Developer");
+    message.value = "Check browser console!";
   }
 };
 
 const handleGetComponent = async () => {
   if (components) {
-    // Демонстрация получения компонента через get()
     const hwComponent = await components.get(HelloWorldComponent);
     if (hwComponent) {
-      hwComponent.greet("Получен через get()");
-      message.value = "Компонент получен через components.get()!";
+      hwComponent.greet("Retrieved via get()");
+      message.value = "Component retrieved via components.get()!";
     }
   }
 };

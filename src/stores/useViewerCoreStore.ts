@@ -1,22 +1,13 @@
-import { shallowRef } from "vue";
+import { ref, shallowRef } from "vue";
+import { defineStore } from "pinia";
 import * as OBC from "@thatopen/components";
 import { FragmentsModel } from "@thatopen/fragments";
 import * as OBF from "@thatopen/components-front";
-import type { ElementData } from "@/view/components/composables/viewer/features/useElementFilter";
+import { LevelsViewData } from "@/view/components/composables/viewer/data/useDataAccess";
 
-/**
- * Store для хранения состояния viewer
- * Используется как единая точка входа для доступа к данным
- *
- * Архитектура:
- * - Все свойства хранятся в shallowRef для реактивности UI
- * - shallowRef обеспечивает реактивность только на верхнем уровне,
- *   не создавая прокси для вложенных объектов, что избегает конфликтов
- *   с объектами Three.js и OBC (highlighter, components и т.д.)
- */
-class ViewerCoreStore {
-  core = {
-    container: shallowRef<HTMLDivElement | undefined>(undefined),
+export const useIFCViewerStore = defineStore("ifcViewer", () => {
+  const core = {
+    container: ref<HTMLDivElement | undefined>(undefined),
     components: shallowRef<OBC.Components | undefined>(undefined),
     words: shallowRef<OBC.Worlds | undefined>(undefined),
     currentWord: shallowRef<
@@ -27,83 +18,71 @@ class ViewerCoreStore {
         >
       | undefined
     >(undefined),
-    workerUrl: shallowRef<string | undefined>(undefined),
+    workerUrl: ref<string | undefined>(undefined),
   };
 
-  modelManager = {
+  const modelManager = {
     ifcLoader: shallowRef<OBC.IfcLoader | undefined>(undefined),
     model: shallowRef<FragmentsModel | undefined>(undefined),
     fragmentManager: shallowRef<OBC.FragmentsManager | undefined>(undefined),
     hider: shallowRef<OBC.Hider | undefined>(undefined),
     finder: shallowRef<OBC.ItemsFinder | undefined>(undefined),
-
-    // Реактивные свойства для UI
-    isLoading: shallowRef(false),
-    loadingProgress: shallowRef(0),
+    isLoading: ref(false),
+    loadingProgress: ref(0),
   };
 
-  features = {
+  const features = {
     clip: {
       clipper: shallowRef<OBC.Clipper | undefined>(undefined),
       clipStyler: shallowRef<OBF.ClipStyler | undefined>(undefined),
     },
-    elementFilter: {
-      // Реактивные свойства для UI
-      filteredElements: shallowRef<ElementData[]>([]),
-      selectedTableId: shallowRef<number | null>(null),
-    },
     selection: {
       highlighter: shallowRef<OBF.Highlighter | undefined>(undefined),
-      mainOutliner: shallowRef<OBF.Outliner | undefined>(undefined),
+      allPlacementsOutliner: shallowRef<OBF.Outliner | undefined>(undefined),
+    },
+    elementsData: {
+      levels: {
+        data: shallowRef<LevelsViewData[]>([]),
+        isLoading: ref(false),
+      },
     },
   };
 
-  /**
-   * Устанавливает isLoading
-   */
-  setIsLoading(value: boolean) {
-    this.modelManager.isLoading.value = value;
+  function setIsLoading(value: boolean) {
+    modelManager.isLoading.value = value;
   }
 
-  /**
-   * Устанавливает loadingProgress
-   */
-  setLoadingProgress(value: number) {
-    this.modelManager.loadingProgress.value = value;
+  function setLoadingProgress(value: number) {
+    modelManager.loadingProgress.value = value;
   }
 
-  /**
-   * Сбрасывает все состояния store
-   */
-  reset() {
-    this.core.container.value = undefined;
-    this.core.components.value = undefined;
-    this.core.words.value = undefined;
-    this.core.currentWord.value = undefined;
-    this.core.workerUrl.value = undefined;
+  function reset() {
+    core.container.value = undefined;
+    core.components.value = undefined;
+    core.words.value = undefined;
+    core.currentWord.value = undefined;
+    core.workerUrl.value = undefined;
 
-    this.modelManager.ifcLoader.value = undefined;
-    this.modelManager.model.value = undefined;
-    this.modelManager.fragmentManager.value = undefined;
-    this.modelManager.hider.value = undefined;
-    this.modelManager.finder.value = undefined;
-    this.modelManager.isLoading.value = false;
-    this.modelManager.loadingProgress.value = 0;
+    modelManager.ifcLoader.value = undefined;
+    modelManager.model.value = undefined;
+    modelManager.fragmentManager.value = undefined;
+    modelManager.hider.value = undefined;
+    modelManager.finder.value = undefined;
+    modelManager.isLoading.value = false;
+    modelManager.loadingProgress.value = 0;
 
-    this.features.clip.clipper.value = undefined;
-    this.features.clip.clipStyler.value = undefined;
-    this.features.elementFilter.filteredElements.value = [];
-    this.features.elementFilter.selectedTableId.value = null;
-    this.features.selection.highlighter.value = undefined;
-    this.features.selection.mainOutliner.value = undefined;
+    features.clip.clipper.value = undefined;
+    features.clip.clipStyler.value = undefined;
+    features.selection.highlighter.value = undefined;
+    features.selection.allPlacementsOutliner.value = undefined;
   }
-}
 
-// Единый экземпляр store (singleton)
-const viewerCoreStore = new ViewerCoreStore();
-
-/**
- * Получить экземпляр store
- * Используется как единая точка входа для доступа к данным viewer
- */
-export const useViewerCoreStore = () => viewerCoreStore;
+  return {
+    core,
+    modelManager,
+    features,
+    setIsLoading,
+    setLoadingProgress,
+    reset,
+  };
+});

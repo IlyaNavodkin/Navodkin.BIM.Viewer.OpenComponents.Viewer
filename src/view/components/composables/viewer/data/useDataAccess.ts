@@ -5,14 +5,12 @@ import {
   ItemAttribute,
   ItemData,
   LodMode,
+  SpatialStructure,
 } from "@thatopen/fragments";
 import * as THREE from "three";
 import * as FRAGS from "@thatopen/fragments";
 import * as OBF from "@thatopen/components-front";
 
-/**
- * Типы для Property Sets и Properties
- */
 export type PropertySet = {
   name: string;
   properties: Property[];
@@ -37,25 +35,37 @@ export type Property = {
   id: number;
 };
 
-/**
- * Данные уровня (IfcBuildingStorey)
- */
 export type LevelsViewData = {
   name: string;
   elevation: number;
   localId: number;
 };
 
-/**
- * Низкоуровневая работа с данными модели
- * Отвечает за получение и форматирование данных элементов, property sets, levels
- */
-export const useDataAccess = () => {
-  /**
-   * Форматирует Property Sets в удобный формат
-   * @param rawPsets - сырые данные Property Sets
-   * @returns Отформатированные Property Sets
-   */
+export interface IEmployeeViewerDataAccess {
+  formatItemPsets: (
+    rawPsets: FRAGS.ItemData[]
+  ) => Record<string, Record<string, any>>;
+  getPropertySet: (
+    localId: number,
+    model: FragmentsModel
+  ) => Promise<Record<string, Record<string, any>>>;
+  getEntitiesByLocalId: (
+    localIds: number[],
+    model: FragmentsModel,
+    config?: Partial<FRAGS.ItemsDataConfig>
+  ) => Promise<ItemData[] | null>;
+  getEntityByLocalId: (
+    localId: number,
+    model: FragmentsModel,
+    config?: Partial<FRAGS.ItemsDataConfig>
+  ) => Promise<ItemData | null>;
+  getSpatialStructure: (
+    model: FragmentsModel
+  ) => Promise<FRAGS.SpatialTreeItem>;
+  getLevels: (model: FragmentsModel) => Promise<LevelsViewData[]>;
+}
+
+export const useDataAccess = (): IEmployeeViewerDataAccess => {
   const formatItemPsets = (rawPsets: FRAGS.ItemData[]) => {
     const result: Record<string, Record<string, any>> = {};
 
@@ -78,12 +88,6 @@ export const useDataAccess = () => {
     return result;
   };
 
-  /**
-   * Получает Property Sets элемента
-   * @param localId - локальный идентификатор элемента
-   * @param model - модель
-   * @returns Property Sets элемента или null
-   */
   const getItemPropertySets = async (
     localId: number,
     model: FragmentsModel
@@ -100,9 +104,6 @@ export const useDataAccess = () => {
     return (data.IsDefinedBy as FRAGS.ItemData[]) ?? [];
   };
 
-  /**
-   * Конфигурация по умолчанию для получения данных элементов
-   */
   const defaultItemsDataConfig: Partial<FRAGS.ItemsDataConfig> = {
     attributesDefault: false,
     relations: {
@@ -111,34 +112,19 @@ export const useDataAccess = () => {
     },
   };
 
-  /**
-   * Получает пространственную структуру модели
-   * @param model - модель
-   * @returns Пространственная структура
-   */
   const getSpatialStructure = async (model: FragmentsModel) => {
     const result = await model.getSpatialStructure();
     return result;
   };
 
-  /**
-   * Получает Property Set элемента в отформатированном виде
-   * @param localId - локальный идентификатор элемента
-   * @param model - модель
-   * @returns Отформатированные Property Sets
-   */
-  const getPropertySet = async (localId: number, model: FragmentsModel) => {
+  const getPropertySet = async (
+    localId: number,
+    model: FragmentsModel
+  ): Promise<Record<string, Record<string, any>>> => {
     const pgsets = await getItemPropertySets(localId, model);
     return formatItemPsets(pgsets ?? []);
   };
 
-  /**
-   * Получает данные сущностей по их localIds
-   * @param localIds - массив локальных идентификаторов
-   * @param model - модель
-   * @param config - конфигурация для получения данных (опционально)
-   * @returns Данные сущностей или null
-   */
   const getEntitiesByLocalId = async (
     localIds: number[],
     model: FragmentsModel,
@@ -155,13 +141,6 @@ export const useDataAccess = () => {
     return null;
   };
 
-  /**
-   * Получает данные сущности по её localId
-   * @param localId - локальный идентификатор элемента
-   * @param model - модель
-   * @param config - конфигурация для получения данных (опционально)
-   * @returns Данные сущности или null
-   */
   const getEntityByLocalId = async (
     localId: number,
     model: FragmentsModel,
@@ -178,11 +157,6 @@ export const useDataAccess = () => {
     return null;
   };
 
-  /**
-   * Получает уровни (IfcBuildingStorey) из модели
-   * @param model - модель
-   * @returns Массив данных уровней
-   */
   const getLevels = async (model: FragmentsModel) => {
     let levelsViewData: LevelsViewData[] = [];
 
@@ -192,13 +166,13 @@ export const useDataAccess = () => {
       ]);
       const storeyIds = Object.values(storeyItems).flat();
 
-      console.log("Найденные уровни (localId):", storeyIds);
+      console.log("Found levels (localId):", storeyIds);
 
       if (storeyIds.length > 0) {
         const storeyData = await model.getItemsData(storeyIds, {
           attributesDefault: true,
         });
-        console.log("Данные уровней:", storeyData);
+        console.log("Level data:", storeyData);
 
         levelsViewData = storeyData.map((item: ItemData) => {
           const nameattr = item.Name as ItemAttribute;

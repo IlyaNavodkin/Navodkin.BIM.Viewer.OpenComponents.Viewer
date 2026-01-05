@@ -1,10 +1,6 @@
 import * as THREE from "three";
 import * as OBC from "@thatopen/components";
 
-/**
- * A basic component to say hello in the console.
- * Demonstrates how to create custom components with lifecycle management.
- */
 export class HelloWorldComponent
   extends OBC.Component
   implements OBC.Disposable, OBC.Updateable
@@ -25,15 +21,10 @@ export class HelloWorldComponent
     super(components);
     components.add(HelloWorldComponent.uuid, this);
 
-    // Инициализация mesh
     this._mesh = new THREE.Mesh();
     this._meshes.push(this._mesh);
   }
 
-  /**
-   * Gets the mesh instance.
-   * Throws an error if mesh is not initialized.
-   */
   get mesh(): THREE.Mesh {
     if (!this._mesh) {
       throw new Error("Mesh not initialized!");
@@ -41,10 +32,6 @@ export class HelloWorldComponent
     return this._mesh;
   }
 
-  /**
-   * Greets a person by name.
-   * @param name - The name of the person to greet
-   */
   greet(name: string): void {
     const message = `${this._message} ${name}!`;
     console.log(message);
@@ -53,19 +40,15 @@ export class HelloWorldComponent
   dispose(): void {
     this.enabled = false;
 
-    // Clean up events
     this.onBeforeUpdate.reset();
     this.onAfterUpdate.reset();
 
-    // Use the disposer component to dispose THREE.js objects
     const disposer = this.components.get(OBC.Disposer);
 
-    // Dispose all meshes including their geometries and materials
     for (const mesh of this._meshes) {
       disposer.destroy(mesh);
     }
 
-    // Remove all references to allow garbage collection
     this._meshes = [];
     this._mesh = null as unknown as THREE.Mesh;
 

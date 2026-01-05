@@ -2,7 +2,7 @@
   <div :class="$style.loadingScreen">
     <div :class="$style.loadingContent">
       <div :class="$style.spinner"></div>
-      <div :class="$style.loadingText">Загрузка модели...</div>
+      <div :class="$style.loadingText">Loading model...</div>
       <div :class="$style.progressBar">
         <div
           :class="$style.progressFill"
@@ -23,7 +23,6 @@ interface Props {
 
 const props = defineProps<Props>();
 
-// Используем значение напрямую, так как оно уже развернуто в родительском компоненте
 const progress = computed(() => props.progress);
 </script>
 
@@ -100,4 +99,3 @@ const progress = computed(() => props.progress);
   font-weight: 500;
 }
 </style>
-

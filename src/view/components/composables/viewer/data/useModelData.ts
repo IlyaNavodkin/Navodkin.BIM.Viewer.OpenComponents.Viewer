@@ -1,44 +1,48 @@
 import { ref } from "vue";
 import { FragmentsModel } from "@thatopen/fragments";
 import { useDataAccess, type LevelsViewData } from "./useDataAccess";
+import * as OBC from "@thatopen/components";
+import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
 
-/**
- * Слой данных для работы с данными модели
- * Отвечает за загрузку и управление данными модели (элементы, уровни, property sets)
- */
-export const useModelData = () => {
+export interface IEmployeeViewerModelData {
+  loadLevels: (model: FragmentsModel) => Promise<void>;
+  getElementInfo: (model: FragmentsModel, localId: number) => Promise<any>;
+  getEntityData: (model: FragmentsModel, localId: number) => Promise<any>;
+  clear: () => void;
+  toMapData: (model: FragmentsModel, localIds: number[]) => OBC.ModelIdMap;
+}
+
+export const useModelData = (): IEmployeeViewerModelData => {
   const { getLevels, getEntityByLocalId } = useDataAccess();
 
-  const levelsData = ref<LevelsViewData[]>([]);
-  const isLoadingLevels = ref(false);
+  const store = useIFCViewerStore();
 
-  /**
-   * Загружает уровни (IfcBuildingStorey) из модели
-   * @param model - модель для загрузки уровней
-   */
   const loadLevels = async (model: FragmentsModel) => {
     try {
-      isLoadingLevels.value = true;
-      levelsData.value = [];
+      store.features.elementsData.levels.isLoading = true;
+      store.features.elementsData.levels.data = [];
 
       const levels = await getLevels(model);
-      levelsData.value = levels.sort((a, b) => a.elevation - b.elevation);
+      store.features.elementsData.levels.data = levels.sort(
+        (a, b) => a.elevation - b.elevation
+      );
 
-      console.log(`Загружено уровней: ${levelsData.value.length}`);
+      console.log(
+        `Loaded levels: ${store.features.elementsData.levels.data.length}`
+      );
     } catch (error) {
-      console.error("Ошибка при загрузке уровней:", error);
-      levelsData.value = [];
+      console.error("Error loading levels:", error);
+      store.features.elementsData.levels.data = [];
     } finally {
-      isLoadingLevels.value = false;
+      store.features.elementsData.levels.isLoading = false;
     }
   };
 
-  /**
-   * Получает информацию об элементе по его localId
-   * @param model - модель
-   * @param localId - локальный идентификатор элемента
-   * @returns Данные элемента или null
-   */
+  const clear = () => {
+    store.features.elementsData.levels.data = [];
+    store.features.elementsData.levels.isLoading = false;
+  };
+
   const getElementInfo = async (
     model: FragmentsModel,
     localId: number
@@ -54,17 +58,18 @@ export const useModelData = () => {
       }
       return null;
     } catch (error) {
-      console.error("Ошибка при получении информации об элементе:", error);
+      console.error("Error getting element information:", error);
       return null;
     }
   };
 
-  /**
-   * Получает данные сущности по localId
-   * @param model - модель
-   * @param localId - локальный идентификатор элемента
-   * @returns Данные сущности или null
-   */
+  const toMapData = (model: FragmentsModel, localIds: number[]) => {
+    const modelIdMap: OBC.ModelIdMap = {
+      [model.modelId]: new Set(localIds),
+    };
+    return modelIdMap;
+  };
+
   const getEntityData = async (
     model: FragmentsModel,
     localId: number
@@ -72,23 +77,11 @@ export const useModelData = () => {
     return await getEntityByLocalId(localId, model);
   };
 
-  /**
-   * Очищает загруженные данные
-   */
-  const clear = () => {
-    levelsData.value = [];
-    isLoadingLevels.value = false;
-  };
-
   return {
-    // Реактивные состояния
-    levelsData,
-    isLoadingLevels,
-
-    // Методы
     loadLevels,
     getElementInfo,
     getEntityData,
     clear,
+    toMapData,
   };
 };
