@@ -1,28 +1,28 @@
-import { ref } from "vue";
-import { FragmentsModel } from "@thatopen/fragments";
-import { useDataAccess, type LevelsViewData } from "./useDataAccess";
+import { useDataAccess } from "./useDataAccess";
 import * as OBC from "@thatopen/components";
 import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
 
 export interface IEmployeeViewerModelData {
-  loadLevels: (model: FragmentsModel) => Promise<void>;
-  getElementInfo: (model: FragmentsModel, localId: number) => Promise<any>;
-  getEntityData: (model: FragmentsModel, localId: number) => Promise<any>;
+  loadLevels: (modelId: string) => Promise<void>;
+  loadEmployeeWorkplaces: (modelId: string) => Promise<void>;
+  getElementInfo: (modelId: string, localId: number) => Promise<any>;
+  getEntityData: (modelId: string, localId: number) => Promise<any>;
   clear: () => void;
-  toMapData: (model: FragmentsModel, localIds: number[]) => OBC.ModelIdMap;
+  toMapData: (modelId: string, localIds: number[]) => OBC.ModelIdMap;
 }
 
 export const useModelData = (): IEmployeeViewerModelData => {
-  const { getLevels, getEntityByLocalId } = useDataAccess();
+  const { getLevels, getEmployeeWorkplaces, getEntityByLocalId } =
+    useDataAccess();
 
   const store = useIFCViewerStore();
 
-  const loadLevels = async (model: FragmentsModel) => {
+  const loadLevels = async (modelId: string) => {
     try {
       store.features.elementsData.levels.isLoading = true;
       store.features.elementsData.levels.data = [];
 
-      const levels = await getLevels(model);
+      const levels = await getLevels(modelId);
       store.features.elementsData.levels.data = levels.sort(
         (a, b) => a.elevation - b.elevation
       );
@@ -38,17 +38,45 @@ export const useModelData = (): IEmployeeViewerModelData => {
     }
   };
 
+  const loadEmployeeWorkplaces = async (modelId: string) => {
+    try {
+      store.features.elementsData.employeeWorkplaces.isLoading = true;
+      store.features.elementsData.employeeWorkplaces.data = [];
+
+      const workplaces = await getEmployeeWorkplaces(modelId);
+      store.features.elementsData.employeeWorkplaces.data = workplaces;
+
+      console.log(
+        `Loaded employee workplaces: ${store.features.elementsData.employeeWorkplaces.data.length}`
+      );
+    } catch (error) {
+      console.error("Error loading employee workplaces:", error);
+      store.features.elementsData.employeeWorkplaces.data = [];
+    } finally {
+      store.features.elementsData.employeeWorkplaces.isLoading = false;
+    }
+  };
+
   const clear = () => {
     store.features.elementsData.levels.data = [];
     store.features.elementsData.levels.isLoading = false;
+    store.features.elementsData.employeeWorkplaces.data = [];
+    store.features.elementsData.employeeWorkplaces.isLoading = false;
   };
 
   const getElementInfo = async (
-    model: FragmentsModel,
+    modelId: string,
     localId: number
   ): Promise<any> => {
     try {
-      const itemsData = await model.getItemsData([localId], {
+      const modelFromId = store.modelManager.fragmentManager?.list.get(
+        modelId.toString()
+      );
+      if (!modelFromId) {
+        throw new Error(`Model not found for modelId: ${modelId}`);
+      }
+
+      const itemsData = await modelFromId.getItemsData([localId], {
         attributesDefault: false,
         attributes: ["Name", "GlobalId", "Tag", "ObjectType"],
       });
@@ -63,22 +91,23 @@ export const useModelData = (): IEmployeeViewerModelData => {
     }
   };
 
-  const toMapData = (model: FragmentsModel, localIds: number[]) => {
+  const toMapData = (modelId: string, localIds: number[]) => {
     const modelIdMap: OBC.ModelIdMap = {
-      [model.modelId]: new Set(localIds),
+      [modelId]: new Set(localIds),
     };
     return modelIdMap;
   };
 
   const getEntityData = async (
-    model: FragmentsModel,
+    modelId: string,
     localId: number
   ): Promise<any> => {
-    return await getEntityByLocalId(localId, model);
+    return await getEntityByLocalId(localId, modelId);
   };
 
   return {
     loadLevels,
+    loadEmployeeWorkplaces,
     getElementInfo,
     getEntityData,
     clear,

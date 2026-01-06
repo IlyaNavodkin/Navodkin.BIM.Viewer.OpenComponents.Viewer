@@ -3,7 +3,10 @@ import { defineStore } from "pinia";
 import * as OBC from "@thatopen/components";
 import { FragmentsModel } from "@thatopen/fragments";
 import * as OBF from "@thatopen/components-front";
-import { LevelsViewData } from "@/view/components/composables/viewer/data/useDataAccess";
+import {
+  LevelsViewData,
+  EmployeeWorkplaceViewData,
+} from "@/view/components/composables/viewer/data/useDataAccess";
 
 export const useIFCViewerStore = defineStore("ifcViewer", () => {
   const core = {
@@ -39,10 +42,17 @@ export const useIFCViewerStore = defineStore("ifcViewer", () => {
     selection: {
       highlighter: shallowRef<OBF.Highlighter | undefined>(undefined),
       allPlacementsOutliner: shallowRef<OBF.Outliner | undefined>(undefined),
+      currentHoveredElement: ref<
+        { modelId: string; localId: number } | undefined
+      >(undefined),
     },
     elementsData: {
       levels: {
         data: shallowRef<LevelsViewData[]>([]),
+        isLoading: ref(false),
+      },
+      employeeWorkplaces: {
+        data: shallowRef<EmployeeWorkplaceViewData[]>([]),
         isLoading: ref(false),
       },
     },
@@ -75,6 +85,7 @@ export const useIFCViewerStore = defineStore("ifcViewer", () => {
     features.clip.clipStyler.value = undefined;
     features.selection.highlighter.value = undefined;
     features.selection.allPlacementsOutliner.value = undefined;
+    features.selection.currentHoveredElement.value = undefined;
   }
 
   return {

@@ -1,15 +1,6 @@
-import { computed, shallowRef } from "vue";
-import * as OBC from "@thatopen/components";
-import {
-  FragmentsModel,
-  ItemAttribute,
-  ItemData,
-  LodMode,
-  SpatialStructure,
-} from "@thatopen/fragments";
-import * as THREE from "three";
+import { ItemAttribute, ItemData } from "@thatopen/fragments";
 import * as FRAGS from "@thatopen/fragments";
-import * as OBF from "@thatopen/components-front";
+import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
 
 export type PropertySet = {
   name: string;
@@ -41,31 +32,44 @@ export type LevelsViewData = {
   localId: number;
 };
 
+export type EmployeeWorkplaceViewData = {
+  localId: number;
+  category: string;
+  workplaceNumber: string;
+};
+
+export type EntityData = {
+  category: string;
+  localId: number;
+};
+
 export interface IEmployeeViewerDataAccess {
   formatItemPsets: (
     rawPsets: FRAGS.ItemData[]
   ) => Record<string, Record<string, any>>;
   getPropertySet: (
     localId: number,
-    model: FragmentsModel
+    modelId: string
   ) => Promise<Record<string, Record<string, any>>>;
   getEntitiesByLocalId: (
     localIds: number[],
-    model: FragmentsModel,
+    modelId: string,
     config?: Partial<FRAGS.ItemsDataConfig>
-  ) => Promise<ItemData[] | null>;
+  ) => Promise<EntityData[] | null>;
   getEntityByLocalId: (
     localId: number,
-    model: FragmentsModel,
+    modelId: string,
     config?: Partial<FRAGS.ItemsDataConfig>
-  ) => Promise<ItemData | null>;
-  getSpatialStructure: (
-    model: FragmentsModel
-  ) => Promise<FRAGS.SpatialTreeItem>;
-  getLevels: (model: FragmentsModel) => Promise<LevelsViewData[]>;
+  ) => Promise<EntityData | null>;
+  getSpatialStructure: (modelId: string) => Promise<FRAGS.SpatialTreeItem>;
+  getLevels: (modelId: string) => Promise<LevelsViewData[]>;
+  getEmployeeWorkplaces: (
+    modelId: string
+  ) => Promise<EmployeeWorkplaceViewData[]>;
 }
 
 export const useDataAccess = (): IEmployeeViewerDataAccess => {
+  const store = useIFCViewerStore();
   const formatItemPsets = (rawPsets: FRAGS.ItemData[]) => {
     const result: Record<string, Record<string, any>> = {};
 
@@ -88,12 +92,13 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
     return result;
   };
 
-  const getItemPropertySets = async (
-    localId: number,
-    model: FragmentsModel
-  ) => {
+  const getItemPropertySets = async (localId: number, modelId: string) => {
     if (!localId) return null;
-    const [data] = await model.getItemsData([localId], {
+    const modelFromId = store.modelManager.fragmentManager?.list.get(modelId);
+    if (!modelFromId) {
+      throw new Error(`Model not found for modelId: ${modelId}`);
+    }
+    const [data] = await modelFromId.getItemsData([localId], {
       attributesDefault: false,
       attributes: ["Name", "NominalValue"],
       relations: {
@@ -112,56 +117,75 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
     },
   };
 
-  const getSpatialStructure = async (model: FragmentsModel) => {
-    const result = await model.getSpatialStructure();
+  const getSpatialStructure = async (modelId: string) => {
+    const modelFromId = store.modelManager.fragmentManager?.list.get(
+      modelId.toString()
+    );
+    if (!modelFromId) {
+      throw new Error(`Model not found for modelId: ${modelId}`);
+    }
+    const result = await modelFromId.getSpatialStructure();
     return result;
   };
 
   const getPropertySet = async (
     localId: number,
-    model: FragmentsModel
+    modelId: string
   ): Promise<Record<string, Record<string, any>>> => {
-    const pgsets = await getItemPropertySets(localId, model);
+    const pgsets = await getItemPropertySets(localId, modelId);
     return formatItemPsets(pgsets ?? []);
   };
 
   const getEntitiesByLocalId = async (
     localIds: number[],
-    model: FragmentsModel,
+    modelId: string,
     config?: Partial<FRAGS.ItemsDataConfig>
-  ) => {
-    const itemsData = await model.getItemsData(
+  ): Promise<EntityData[] | null> => {
+    const modelFromId = store.modelManager.fragmentManager?.list.get(modelId);
+    if (!modelFromId) {
+      throw new Error(`Model not found for modelId: ${modelId}`);
+    }
+    const itemsData = await modelFromId.getItemsData(
       localIds,
       config ?? defaultItemsDataConfig
     );
 
     if (itemsData && itemsData.length > 0) {
-      return itemsData;
+      return itemsData.map((item: ItemData) => ({
+        category: (item._category as ItemAttribute)?.value?.toString() ?? "",
+        localId: ((item._localId as ItemAttribute)?.value as number) ?? 0,
+      }));
     }
     return null;
   };
 
   const getEntityByLocalId = async (
     localId: number,
-    model: FragmentsModel,
+    modelId: string,
     config?: Partial<FRAGS.ItemsDataConfig>
-  ) => {
-    const itemsData = await getEntitiesByLocalId(
+  ): Promise<EntityData | null> => {
+    const modelFromId = store.modelManager.fragmentManager?.list.get(modelId);
+    if (!modelFromId) {
+      throw new Error(`Model not found for modelId: ${modelId}`);
+    }
+    const entities = await getEntitiesByLocalId(
       [localId],
-      model,
+      modelId,
       config ?? defaultItemsDataConfig
     );
-    if (itemsData && itemsData.length > 0) {
-      return itemsData[0];
-    }
-    return null;
+
+    return entities?.[0] ?? null;
   };
 
-  const getLevels = async (model: FragmentsModel) => {
+  const getLevels = async (modelId: string) => {
+    const modelFromId = store.modelManager.fragmentManager?.list.get(modelId);
+    if (!modelFromId) {
+      throw new Error(`Model not found for modelId: ${modelId}`);
+    }
     let levelsViewData: LevelsViewData[] = [];
 
-    if (model) {
-      const storeyItems = await model.getItemsOfCategories([
+    if (modelFromId) {
+      const storeyItems = await modelFromId.getItemsOfCategories([
         /IFCBUILDINGSTOREY/,
       ]);
       const storeyIds = Object.values(storeyItems).flat();
@@ -169,7 +193,7 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
       console.log("Found levels (localId):", storeyIds);
 
       if (storeyIds.length > 0) {
-        const storeyData = await model.getItemsData(storeyIds, {
+        const storeyData = await modelFromId.getItemsData(storeyIds, {
           attributesDefault: true,
         });
         console.log("Level data:", storeyData);
@@ -191,6 +215,50 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
     return levelsViewData;
   };
 
+  const getEmployeeWorkplaces = async (modelId: string) => {
+    const modelFromId = store.modelManager.fragmentManager?.list.get(modelId);
+    if (!modelFromId) {
+      throw new Error(`Model not found for modelId: ${modelId}`);
+    }
+    let workplacesViewData: EmployeeWorkplaceViewData[] = [];
+
+    if (modelFromId) {
+      const workplaceItems = await modelFromId.getItemsOfCategories([
+        /IFCFURNISHINGELEMENT/,
+      ]);
+      const workplaceIds = Object.values(workplaceItems).flat();
+
+      console.log("Found employee workplaces (localId):", workplaceIds);
+
+      if (workplaceIds.length > 0) {
+        const workplaceData = await modelFromId.getItemsData(workplaceIds, {
+          attributesDefault: true,
+        });
+        console.log("Employee workplace data:", workplaceData);
+
+        for (const item of workplaceData) {
+          console.log("Item:", item);
+          const properties = await getPropertySet(
+            (item._localId as ItemAttribute)?.value as number,
+            modelId
+          );
+          console.log("Properties:", properties);
+          const workplaceNumber = properties["Identity Data"]?.Comments;
+          if (workplaceNumber) {
+            workplacesViewData.push({
+              localId: (item._localId as ItemAttribute)?.value as number,
+              category:
+                (item._category as ItemAttribute)?.value?.toString() ?? "",
+              workplaceNumber: workplaceNumber,
+            });
+          }
+        }
+      }
+    }
+
+    return workplacesViewData;
+  };
+
   return {
     formatItemPsets,
     getPropertySet,
@@ -201,5 +269,6 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
     getSpatialStructure,
 
     getLevels,
+    getEmployeeWorkplaces,
   };
 };

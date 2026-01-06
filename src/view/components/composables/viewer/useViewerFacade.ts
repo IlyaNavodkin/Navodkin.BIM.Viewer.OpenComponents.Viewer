@@ -6,7 +6,6 @@ import { useModelManager } from "./core/useModelManager";
 import { useModelData } from "./data/useModelData";
 import { useSelection } from "./features/useSelection";
 import * as OBC from "@thatopen/components";
-import * as OBF from "@thatopen/components-front";
 
 export interface IFacadeCore {
   setupViewer: (containerElement: HTMLDivElement) => Promise<void>;
@@ -25,14 +24,21 @@ export interface IFacadeModelManager {
 }
 
 export interface IFacadeModelData {
-  getElementInfo: (model: FragmentsModel, localId: number) => Promise<any>;
-  getEntityData: (model: FragmentsModel, localId: number) => Promise<any>;
+  getElementInfo: (modelId: string, localId: number) => Promise<any>;
+  getEntityData: (modelId: string, localId: number) => Promise<any>;
+}
+
+export interface IFacadeSelection {
+  clearHoverHighlight: () => void;
+  clearSelectionHighlight: () => void;
+  setSelectionHighlight: (modelIdMap: OBC.ModelIdMap) => void;
 }
 
 export interface IEmployeeViewerFacade {
   core: IFacadeCore;
   modelManager: IFacadeModelManager;
   modelDataAccess: IFacadeModelData;
+  selection: IFacadeSelection;
 }
 
 export const useViewer = (): IEmployeeViewerFacade => {
@@ -73,6 +79,7 @@ export const useViewer = (): IEmployeeViewerFacade => {
   const disposeViewer = () => {
     modelData.clear();
     selection.highlight.clear();
+    selection.hover.clear();
     selection.outliner.clear();
     modelManager.dispose();
     core.dispose();
@@ -90,7 +97,8 @@ export const useViewer = (): IEmployeeViewerFacade => {
     }
 
     const model = await modelManager.loadModelByPath(path, name);
-    await modelData.loadLevels(model);
+    await modelData.loadLevels(model.modelId);
+    await modelData.loadEmployeeWorkplaces(model.modelId);
     return model;
   };
 
@@ -124,6 +132,12 @@ export const useViewer = (): IEmployeeViewerFacade => {
     modelDataAccess: {
       getElementInfo: modelData.getElementInfo,
       getEntityData: modelData.getEntityData,
+    },
+    selection: {
+      clearHoverHighlight: () => selection.hover.clear(),
+      clearSelectionHighlight: () => selection.highlight.clear(),
+      setSelectionHighlight: (modelIdMap: OBC.ModelIdMap) =>
+        selection.highlight.set(modelIdMap),
     },
   };
 };

@@ -2,8 +2,11 @@ import * as OBC from "@thatopen/components";
 import * as THREE from "three";
 import * as OBF from "@thatopen/components-front";
 import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
+import { useDataAccess } from "../data/useDataAccess";
+import { RenderedFaces } from "@thatopen/fragments";
 
 export const SELECT_PLACEMENT_HIGHLIGHTER_NAME = "selectPlacement";
+export const HOVER_HIGHLIGHTER_NAME = "hoverHighlight";
 
 export interface IEmployeeViewerSelectionHighlight {
   clear: () => void;
@@ -15,15 +18,22 @@ export interface IEmployeeViewerSelectionOutliner {
   set: (modelIdMap: OBC.ModelIdMap) => void;
 }
 
+export interface IEmployeeViewerHoverHighlight {
+  clear: () => void;
+}
+
 export interface IEmployeeViewerSelection {
   highlight: IEmployeeViewerSelectionHighlight;
   outliner: IEmployeeViewerSelectionOutliner;
+  hover: IEmployeeViewerHoverHighlight;
 
   init: () => void;
 }
 
 export const useSelection = (): IEmployeeViewerSelection => {
   const store = useIFCViewerStore();
+  const dataAccess = useDataAccess();
+  let raycaster: any = null;
 
   const init = () => {
     if (!store.core.components || !store.core.currentWord) {
@@ -39,11 +49,12 @@ export const useSelection = (): IEmployeeViewerSelection => {
       OBF.Highlighter
     );
 
+    // Настройка основного highlighter для выделения
     store.features.selection.highlighter.setup({
       world: world,
       selectName: SELECT_PLACEMENT_HIGHLIGHTER_NAME,
       selectEnabled: true,
-      autoHighlightOnClick: true,
+      autoHighlightOnClick: false,
       selectMaterialDefinition: {
         color: new THREE.Color("red"),
         opacity: 0.9,
@@ -53,15 +64,46 @@ export const useSelection = (): IEmployeeViewerSelection => {
       autoUpdateFragments: true,
     });
 
+    store.features.selection.highlighter.styles.set(HOVER_HIGHLIGHTER_NAME, {
+      color: new THREE.Color("red"),
+      opacity: 0.5,
+      transparent: false,
+      renderedFaces: RenderedFaces.ONE,
+    });
+
     store.features.selection.allPlacementsOutliner = createOutliner(
       new THREE.Color("#8B0000"),
-      2,
+      3,
       new THREE.Color("#8B0000"),
-      0,
+      0.4,
       world
     );
 
     store.features.selection.highlighter.updateColors();
+
+    // Инициализация raycaster
+    setupRaycaster(world);
+  };
+
+  const setupRaycaster = (
+    world: OBC.SimpleWorld<
+      OBC.SimpleScene,
+      OBC.SimpleCamera,
+      OBF.PostproductionRenderer
+    >
+  ) => {
+    if (!store.core.components || !store.core.container) {
+      return;
+    }
+
+    const casters = store.core.components.get(OBC.Raycasters);
+    raycaster = casters.get(world);
+
+    // Автоматически включаем hover highlight
+    store.core.container.addEventListener("mousemove", handleMouseOver);
+
+    // Добавляем обработчик двойного клика
+    store.core.container.addEventListener("dblclick", handleDoubleClick);
   };
 
   function createOutliner(
@@ -115,10 +157,123 @@ export const useSelection = (): IEmployeeViewerSelection => {
     },
   };
 
+  const handleMouseOver = async () => {
+    if (!raycaster || !store.features.selection.highlighter) {
+      return;
+    }
+
+    try {
+      const result = (await raycaster.castRay()) as any;
+
+      if (result && result.object) {
+        // Получаем modelId и localId из результата raycast
+        const modelId = result.fragments.modelId;
+        const localId = result.localId;
+
+        if (
+          !store.features.elementsData.employeeWorkplaces.data.some(
+            (workplace) => workplace.localId === localId
+          )
+        ) {
+          store.features.selection.allPlacementsOutliner?.clean();
+          store.features.selection.currentHoveredElement = undefined;
+          return;
+        }
+
+        store.features.selection.allPlacementsOutliner?.clean();
+
+        const modelIdMap = {
+          [modelId]: new Set([localId]),
+        };
+
+        store.features.selection.allPlacementsOutliner?.addItems(modelIdMap);
+
+        // Сохраняем текущий подсвеченный элемент
+        store.features.selection.currentHoveredElement = {
+          modelId,
+          localId,
+        };
+      } else {
+        // Если ничего не попало под курсор, очищаем подсветку
+        if (store.features.selection.currentHoveredElement) {
+          store.features.selection.allPlacementsOutliner?.clean();
+          store.features.selection.currentHoveredElement = undefined;
+        }
+      }
+    } catch (error) {
+      console.warn("Error during raycast:", error);
+    }
+  };
+
+  const handleDoubleClick = async () => {
+    if (!raycaster) {
+      return;
+    }
+
+    try {
+      const result = (await raycaster.castRay()) as any;
+
+      if (result && result.object) {
+        // Получаем modelId и localId из результата raycast
+        const modelId = result.fragments.modelId;
+        const localId = result.localId;
+
+        // Создаём modelIdMap
+        const modelIdMap = {
+          [modelId]: new Set([localId]),
+        };
+
+        console.log("=== Double Click ===");
+        console.log("Result:", result);
+        console.log("ModelIdMap:", modelIdMap);
+        console.log("ModelId:", modelId);
+        console.log("LocalId:", localId);
+        console.log("===================");
+
+        const entity = await dataAccess.getEntityByLocalId(localId, modelId);
+
+        console.log("Entity:", entity);
+
+        if (
+          !store.features.elementsData.employeeWorkplaces.data.some(
+            (workplace) => workplace.localId === localId
+          )
+        ) {
+          store.features.selection.highlighter?.clear(HOVER_HIGHLIGHTER_NAME);
+          store.features.selection.currentHoveredElement = undefined;
+          return;
+        }
+
+        store.features.selection.highlighter?.clear(HOVER_HIGHLIGHTER_NAME);
+        store.features.selection.highlighter?.highlightByID(
+          HOVER_HIGHLIGHTER_NAME,
+          modelIdMap,
+          true,
+          true
+        );
+      } else {
+        console.log("=== Double Click ===");
+        console.log("No object under cursor");
+        console.log("===================");
+      }
+    } catch (error) {
+      console.warn("Error during double click raycast:", error);
+    }
+  };
+
+  const hover: IEmployeeViewerHoverHighlight = {
+    clear: () => {
+      if (!store.features.selection.highlighter) return;
+      store.features.selection.highlighter.clear(HOVER_HIGHLIGHTER_NAME);
+      store.features.selection.currentHoveredElement = undefined;
+    },
+  };
+
   return {
     init,
 
     highlight,
     outliner,
+    hover,
   };
 };
