@@ -45,6 +45,9 @@ export const useIFCViewerStore = defineStore("ifcViewer", () => {
       currentHoveredElement: ref<
         { modelId: string; localId: number } | undefined
       >(undefined),
+      currentSelectedElement: ref<
+        { modelId: string; localId: number } | undefined
+      >(undefined),
     },
     elementsData: {
       levels: {
@@ -86,6 +89,7 @@ export const useIFCViewerStore = defineStore("ifcViewer", () => {
     features.selection.highlighter.value = undefined;
     features.selection.allPlacementsOutliner.value = undefined;
     features.selection.currentHoveredElement.value = undefined;
+    features.selection.currentSelectedElement.value = undefined;
   }
 
   return {

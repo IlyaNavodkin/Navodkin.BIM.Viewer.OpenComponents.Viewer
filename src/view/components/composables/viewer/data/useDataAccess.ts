@@ -36,6 +36,7 @@ export type EmployeeWorkplaceViewData = {
   localId: number;
   category: string;
   workplaceNumber: string;
+  level: string;
 };
 
 export type EntityData = {
@@ -244,12 +245,14 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
           );
           console.log("Properties:", properties);
           const workplaceNumber = properties["Identity Data"]?.Comments;
-          if (workplaceNumber) {
+          const level = properties["Constraints"]?.Level;
+          if (workplaceNumber && level) {
             workplacesViewData.push({
               localId: (item._localId as ItemAttribute)?.value as number,
               category:
                 (item._category as ItemAttribute)?.value?.toString() ?? "",
               workplaceNumber: workplaceNumber,
+              level: level,
             });
           }
         }

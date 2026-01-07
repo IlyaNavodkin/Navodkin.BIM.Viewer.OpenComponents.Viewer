@@ -6,7 +6,6 @@ import { useDataAccess } from "../data/useDataAccess";
 import { RenderedFaces } from "@thatopen/fragments";
 
 export const SELECT_PLACEMENT_HIGHLIGHTER_NAME = "selectPlacement";
-export const HOVER_HIGHLIGHTER_NAME = "hoverHighlight";
 
 export interface IEmployeeViewerSelectionHighlight {
   clear: () => void;
@@ -18,14 +17,9 @@ export interface IEmployeeViewerSelectionOutliner {
   set: (modelIdMap: OBC.ModelIdMap) => void;
 }
 
-export interface IEmployeeViewerHoverHighlight {
-  clear: () => void;
-}
-
 export interface IEmployeeViewerSelection {
   highlight: IEmployeeViewerSelectionHighlight;
-  outliner: IEmployeeViewerSelectionOutliner;
-  hover: IEmployeeViewerHoverHighlight;
+  hover: IEmployeeViewerSelectionOutliner;
 
   init: () => void;
 }
@@ -57,18 +51,11 @@ export const useSelection = (): IEmployeeViewerSelection => {
       autoHighlightOnClick: false,
       selectMaterialDefinition: {
         color: new THREE.Color("red"),
-        opacity: 0.9,
-        transparent: true,
-        renderedFaces: 1,
+        opacity: 0.5,
+        transparent: false,
+        renderedFaces: RenderedFaces.ONE,
       },
       autoUpdateFragments: true,
-    });
-
-    store.features.selection.highlighter.styles.set(HOVER_HIGHLIGHTER_NAME, {
-      color: new THREE.Color("red"),
-      opacity: 0.5,
-      transparent: false,
-      renderedFaces: RenderedFaces.ONE,
     });
 
     store.features.selection.allPlacementsOutliner = createOutliner(
@@ -134,31 +121,51 @@ export const useSelection = (): IEmployeeViewerSelection => {
       store.features.selection.highlighter!.clear(
         SELECT_PLACEMENT_HIGHLIGHTER_NAME
       );
+      store.features.selection.currentSelectedElement = undefined;
     },
     set: (modelIdMap: OBC.ModelIdMap) => {
       if (!store.features.selection.highlighter) return;
+      highlight.clear();
       store.features.selection.highlighter!.highlightByID(
         SELECT_PLACEMENT_HIGHLIGHTER_NAME,
         modelIdMap,
         true,
         true
       );
+      store.features.selection.currentSelectedElement = {
+        modelId: Object.keys(modelIdMap)[0],
+        localId: Array.from(modelIdMap[Object.keys(modelIdMap)[0]])[0],
+      };
     },
   };
 
-  const outliner: IEmployeeViewerSelectionOutliner = {
+  const hover: IEmployeeViewerSelectionOutliner = {
     clear: () => {
       if (!store.features.selection.allPlacementsOutliner) return;
       store.features.selection.allPlacementsOutliner!.clean();
+      store.features.selection.currentHoveredElement = undefined;
     },
     set: (modelIdMap: OBC.ModelIdMap) => {
       if (!store.features.selection.allPlacementsOutliner) return;
+      hover.clear();
+      store.features.selection.allPlacementsOutliner!.clean();
       store.features.selection.allPlacementsOutliner!.addItems(modelIdMap);
+      store.features.selection.currentHoveredElement = {
+        modelId: Object.keys(modelIdMap)[0],
+        localId: Array.from(modelIdMap[Object.keys(modelIdMap)[0]])[0],
+      };
     },
   };
 
-  const handleMouseOver = async () => {
+  const handleMouseOver = async (event: MouseEvent) => {
     if (!raycaster || !store.features.selection.highlighter) {
+      return;
+    }
+
+    // Проверяем, не находится ли курсор над панелью
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-workplace-panel]")) {
+      // Если курсор над панелью - не обрабатываем hover
       return;
     }
 
@@ -166,7 +173,6 @@ export const useSelection = (): IEmployeeViewerSelection => {
       const result = (await raycaster.castRay()) as any;
 
       if (result && result.object) {
-        // Получаем modelId и localId из результата raycast
         const modelId = result.fragments.modelId;
         const localId = result.localId;
 
@@ -175,30 +181,17 @@ export const useSelection = (): IEmployeeViewerSelection => {
             (workplace) => workplace.localId === localId
           )
         ) {
-          store.features.selection.allPlacementsOutliner?.clean();
-          store.features.selection.currentHoveredElement = undefined;
+          hover.clear();
           return;
         }
-
-        store.features.selection.allPlacementsOutliner?.clean();
 
         const modelIdMap = {
           [modelId]: new Set([localId]),
         };
 
-        store.features.selection.allPlacementsOutliner?.addItems(modelIdMap);
-
-        // Сохраняем текущий подсвеченный элемент
-        store.features.selection.currentHoveredElement = {
-          modelId,
-          localId,
-        };
+        hover.set(modelIdMap);
       } else {
-        // Если ничего не попало под курсор, очищаем подсветку
-        if (store.features.selection.currentHoveredElement) {
-          store.features.selection.allPlacementsOutliner?.clean();
-          store.features.selection.currentHoveredElement = undefined;
-        }
+        hover.clear();
       }
     } catch (error) {
       console.warn("Error during raycast:", error);
@@ -239,18 +232,11 @@ export const useSelection = (): IEmployeeViewerSelection => {
             (workplace) => workplace.localId === localId
           )
         ) {
-          store.features.selection.highlighter?.clear(HOVER_HIGHLIGHTER_NAME);
-          store.features.selection.currentHoveredElement = undefined;
+          highlight.clear();
           return;
         }
 
-        store.features.selection.highlighter?.clear(HOVER_HIGHLIGHTER_NAME);
-        store.features.selection.highlighter?.highlightByID(
-          HOVER_HIGHLIGHTER_NAME,
-          modelIdMap,
-          true,
-          true
-        );
+        highlight.set(modelIdMap);
       } else {
         console.log("=== Double Click ===");
         console.log("No object under cursor");
@@ -261,19 +247,10 @@ export const useSelection = (): IEmployeeViewerSelection => {
     }
   };
 
-  const hover: IEmployeeViewerHoverHighlight = {
-    clear: () => {
-      if (!store.features.selection.highlighter) return;
-      store.features.selection.highlighter.clear(HOVER_HIGHLIGHTER_NAME);
-      store.features.selection.currentHoveredElement = undefined;
-    },
-  };
-
   return {
     init,
 
     highlight,
-    outliner,
     hover,
   };
 };

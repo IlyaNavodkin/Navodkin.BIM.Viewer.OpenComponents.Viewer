@@ -80,7 +80,6 @@ export const useViewer = (): IEmployeeViewerFacade => {
     modelData.clear();
     selection.highlight.clear();
     selection.hover.clear();
-    selection.outliner.clear();
     modelManager.dispose();
     core.dispose();
   };
@@ -92,7 +91,7 @@ export const useViewer = (): IEmployeeViewerFacade => {
     if (store.modelManager.model) {
       modelData.clear();
       selection.highlight.clear();
-      selection.outliner.clear();
+      selection.hover.clear();
       modelManager.unload();
     }
 

@@ -1,11 +1,14 @@
 ﻿<script lang="ts" setup>
 import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useViewer } from "@/view/components/composables/viewer/useViewerFacade";
+import { useEmployeeWorkplace } from "@/view/components/composables/viewer/features/useEmployeeWorkplace";
 import LoadingScreen from "./common/LoadingScreen.vue";
+import EmployeeWorkplacePanel from "./EmployeeWorkplacePanel.vue";
 
 const containerRef = ref<HTMLDivElement | null>(null);
 
 const viewer = useViewer();
+const employeeWorkplace = useEmployeeWorkplace();
 
 const isModelLoaded = computed(() => {
   return viewer.modelManager.isModelLoaded.value;
@@ -18,6 +21,31 @@ const isLoading = computed(() => {
 const loadingProgress = computed(() => {
   return viewer.modelManager.loadingProgress.value;
 });
+
+// Обработчики событий от панели
+const handleLevelChange = (level: string) => {
+  employeeWorkplace.selectedLevel.value = level;
+};
+
+const handleSearchChange = (query: string) => {
+  employeeWorkplace.searchQuery.value = query;
+};
+
+const handleOccupancyChange = (filter: string) => {
+  employeeWorkplace.occupancyFilter.value = filter;
+};
+
+const handleCardHover = (localId: number | null) => {
+  employeeWorkplace.handleCardHover(localId);
+};
+
+const handleCardClick = (localId: number) => {
+  employeeWorkplace.handleCardClick(localId);
+};
+
+const handleCardLeave = () => {
+  employeeWorkplace.handleCardLeave();
+};
 
 onMounted(async () => {
   if (!containerRef.value) {
@@ -54,7 +82,24 @@ onUnmounted(() => {
           />
         </div>
 
-        <div ref="containerRef" :class="$style.viewport" />
+        <div ref="containerRef" :class="$style.viewport">
+          <!-- Панель рабочих мест -->
+          <EmployeeWorkplacePanel
+            v-if="isModelLoaded"
+            :workplace-cards="employeeWorkplace.filteredWorkplaceCards.value"
+            :available-levels="employeeWorkplace.availableLevels.value"
+            :selected-level="employeeWorkplace.selectedLevel.value"
+            :search-query="employeeWorkplace.searchQuery.value"
+            :occupancy-filter="employeeWorkplace.occupancyFilter.value"
+            :selected-local-id="employeeWorkplace.selectedLocalId.value"
+            @update:selectedLevel="handleLevelChange"
+            @update:searchQuery="handleSearchChange"
+            @update:occupancyFilter="handleOccupancyChange"
+            @cardHover="handleCardHover"
+            @cardClick="handleCardClick"
+            @cardLeave="handleCardLeave"
+          />
+        </div>
       </div>
     </div>
   </div>
