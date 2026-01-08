@@ -1,6 +1,7 @@
 import * as OBC from "@thatopen/components";
 import { FragmentsModel, IfcImporter, LodMode } from "@thatopen/fragments";
 import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
+import { PostproductionAspect } from "@thatopen/components-front";
 
 export interface IEmployeeViewerModelManager {
   init: () => Promise<void>;
@@ -14,19 +15,22 @@ export const useModelManager = (): IEmployeeViewerModelManager => {
   const store = useIFCViewerStore();
 
   const init = async () => {
-    if (!store.core.components || !store.core.workerUrl) {
+    if (
+      !store.core.components ||
+      !store.core.workerUrl ||
+      !store.core.currentWorld ||
+      !store.core.currentWorld.renderer
+    ) {
       throw new Error(
         "Components and workerUrl must be initialized before ModelManager initialization"
       );
     }
 
-    store.modelManager.ifcLoader = store.core.components.get(OBC.IfcLoader);
+    const ifcLoader = store.core.components.get(OBC.IfcLoader);
 
-    store.modelManager.ifcLoader.onIfcImporterInitialized.add(
-      handleIfcImporterInitialized
-    );
+    ifcLoader.onIfcImporterInitialized.add(handleIfcImporterInitialized);
 
-    await store.modelManager.ifcLoader.setup({
+    await ifcLoader.setup({
       autoSetWasm: false,
       wasm: {
         path: "https://unpkg.com/web-ifc@0.0.72/",
@@ -37,32 +41,34 @@ export const useModelManager = (): IEmployeeViewerModelManager => {
       },
     });
 
-    store.modelManager.fragmentManager = store.core.components.get(
-      OBC.FragmentsManager
-    );
-    store.modelManager.fragmentManager.init(store.core.workerUrl);
+    const fragmentManager = store.core.components.get(OBC.FragmentsManager);
+    fragmentManager.init(store.core.workerUrl);
 
-    store.modelManager.hider = store.core.components.get(OBC.Hider);
-    store.modelManager.finder = store.core.components.get(OBC.ItemsFinder);
+    store.core.currentWorld.renderer.postproduction.style =
+      PostproductionAspect.COLOR_PEN_SHADOWS;
 
-    store.core.currentWord!.camera.controls.addEventListener("rest", () => {
-      if (!store.modelManager.fragmentManager) {
+    const hider = store.core.components.get(OBC.Hider);
+    const finder = store.core.components.get(OBC.ItemsFinder);
+
+    store.initializeModelManager(ifcLoader, fragmentManager, hider, finder);
+
+    store.core.currentWorld!.camera.controls.addEventListener("rest", () => {
+      const fragmentMgr = store.modelManager.fragmentManager;
+      if (!fragmentMgr) {
         throw new Error("FragmentManager is not exists");
       }
-      store.modelManager.fragmentManager.core.update(true);
+      fragmentMgr.core.update(true);
     });
 
-    store.modelManager.fragmentManager.list.onItemSet.add(
-      ({ value: model }) => {
-        if (!store.core.currentWord) {
-          throw new Error("World is not exists");
-        }
-
-        model.useCamera(store.core.currentWord.camera.three);
-        store.core.currentWord.scene.three.add(model.object);
-        store.modelManager.fragmentManager!.core.update(true);
+    fragmentManager.list.onItemSet.add(({ value: model }) => {
+      if (!store.core.currentWorld) {
+        throw new Error("World is not exists");
       }
-    );
+
+      model.useCamera(store.core.currentWorld.camera.three);
+      store.core.currentWorld.scene.three.add(model.object);
+      fragmentManager.core.update(true);
+    });
   };
 
   const handleIfcImporterInitialized = (importer: IfcImporter) => {
@@ -91,7 +97,7 @@ export const useModelManager = (): IEmployeeViewerModelManager => {
 
       store.modelManager.fragmentManager?.list.clear();
 
-      const model = await store.modelManager.ifcLoader.load(
+      const model = await store.modelManager.ifcLoader!.load(
         buffer,
         true,
         name,
@@ -103,7 +109,7 @@ export const useModelManager = (): IEmployeeViewerModelManager => {
       );
 
       model.setLodMode(LodMode.ALL_VISIBLE);
-      store.modelManager.model = model;
+      store.setModel(model);
       store.setLoadingProgress(100);
 
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -131,7 +137,7 @@ export const useModelManager = (): IEmployeeViewerModelManager => {
   const unload = () => {
     if (store.modelManager.model) {
       store.modelManager.model.dispose();
-      store.modelManager.model = undefined;
+      store.setModel(undefined);
     }
   };
 
@@ -155,14 +161,7 @@ export const useModelManager = (): IEmployeeViewerModelManager => {
         }
       }
 
-      store.modelManager.ifcLoader = undefined;
-      store.modelManager.model = undefined;
-      store.modelManager.fragmentManager = undefined;
-      store.modelManager.hider = undefined;
-      store.modelManager.finder = undefined;
-
-      store.setIsLoading(false);
-      store.setLoadingProgress(0);
+      store.clearModelManager();
     } catch (error) {
       console.error("Error disposing model manager resources:", error);
     }

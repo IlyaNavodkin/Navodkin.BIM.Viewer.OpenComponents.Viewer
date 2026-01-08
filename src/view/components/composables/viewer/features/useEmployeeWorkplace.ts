@@ -2,8 +2,10 @@ import { ref, computed, watch, type Ref, type ComputedRef } from "vue";
 import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
 import { useEmployeeStore } from "@/stores/useEmployeeStore";
 import { useSelection } from "./useSelection";
+import { useDataAccess } from "../data/useDataAccess";
 import * as OBC from "@thatopen/components";
 import type { WorkplaceCardData } from "@/view/components/viewport/WorkplaceCard.vue";
+import { useRoute } from "vue-router";
 
 export interface IEmployeeWorkplace {
   workplaceCards: ComputedRef<WorkplaceCardData[]>;
@@ -14,15 +16,20 @@ export interface IEmployeeWorkplace {
   availableLevels: ComputedRef<string[]>;
   selectedLocalId: ComputedRef<number | null>;
 
-  handleCardHover: (localId: number | null) => void;
-  handleCardClick: (localId: number) => void;
-  handleCardLeave: () => void;
+  hoverWorkplace: (localId: number | null) => Promise<void>;
+  selectWorkplaceById: (localId: number) => Promise<void>;
+  releaseHoverWorkplace: () => Promise<void>;
+  selectWorkplaceFromRoute: () => Promise<void>;
+  loadEmployeeWorkplaces: (modelId: string) => Promise<void>;
+  clearWorkplaces: () => void;
 }
 
 export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
+  const route = useRoute();
   const viewerStore = useIFCViewerStore();
   const employeeStore = useEmployeeStore();
   const selection = useSelection();
+  const { getEmployeeWorkplaces } = useDataAccess();
 
   const selectedLevel = ref<string>("all");
   const searchQuery = ref<string>("");
@@ -30,9 +37,7 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
 
   // Выбранная карточка
   const selectedLocalId = computed<number | null>(() => {
-    return (
-      viewerStore.features.selection.currentSelectedElement?.localId ?? null
-    );
+    return viewerStore.features.selection.highlightedElement?.localId ?? null;
   });
 
   // Агрегированные данные: объединяем рабочие места и сотрудников
@@ -97,12 +102,26 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
     return filtered;
   });
 
+  const selectWorkplaceFromRoute = async () => {
+    const employeeId = route.params.employeeId;
+    if (typeof employeeId === "string") {
+      const employee = employeeStore.getEmployeeById(employeeId);
+      if (!employee) return;
+      const workplace = workplaceCards.value.find(
+        (card) => card.workplaceNumber === employee?.workplaceNumber
+      );
+      if (workplace) {
+        await selectWorkplaceById(workplace.localId);
+      }
+    }
+  };
+
   // Обработка наведения на карточку
-  const handleCardHover = (localId: number | null) => {
+  const hoverWorkplace = async (localId: number | null) => {
     if (!viewerStore.modelManager.model) return;
 
     if (localId === null) {
-      selection.hover.clear();
+      await selection.hover.clear();
       return;
     }
 
@@ -113,7 +132,7 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
       );
 
     if (!isWorkplace) {
-      selection.hover.clear();
+      await selection.hover.clear();
       return;
     }
 
@@ -128,11 +147,11 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
     console.log("ModelIdMap:", modelIdMap);
     console.log("==================");
 
-    selection.hover.set(modelIdMap);
+    await selection.hover.set(modelIdMap);
   };
 
   // Обработка клика на карточку
-  const handleCardClick = (localId: number) => {
+  const selectWorkplaceById = async (localId: number) => {
     if (!viewerStore.modelManager.model) return;
 
     // Проверяем, что элемент является рабочим местом
@@ -142,7 +161,7 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
       );
 
     if (!isWorkplace) {
-      selection.highlight.clear();
+      await selection.highlight.clear();
       return;
     }
 
@@ -158,18 +177,87 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
     console.log("==================");
 
     // Устанавливаем выделение (без возможности сброса при повторном клике)
-    selection.highlight.set(modelIdMap);
+    await selection.highlight.set(modelIdMap);
   };
 
   // Обработка ухода курсора с карточки
-  const handleCardLeave = () => {
-    selection.hover.clear();
+  const releaseHoverWorkplace = async () => {
+    await selection.hover.clear();
   };
 
+  // Прокрутка к выбранной карточке
+  const scrollToSelectedCard = (localId: number) => {
+    // Ждем следующего тика для рендера
+    setTimeout(() => {
+      const cardElement = document.querySelector(
+        `[data-workplace-card-id="${localId}"]`
+      ) as HTMLElement | null;
+
+      if (cardElement) {
+        cardElement.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "nearest",
+        });
+      }
+    }, 100);
+  };
+
+  // Отслеживание изменений выделения и прокрутка к карточке
+  watch(
+    () => viewerStore.features.selection.highlightedElement,
+    (newSelectedElement) => {
+      if (!newSelectedElement) return;
+
+      const { localId } = newSelectedElement;
+
+      // Проверяем, что элемент является рабочим местом
+      const isWorkplace = workplaceCards.value.some(
+        (card) => card.localId === localId
+      );
+
+      if (isWorkplace) {
+        // Проверяем, что карточка присутствует в отфильтрованном списке
+        const isVisible = filteredWorkplaceCards.value.some(
+          (card) => card.localId === localId
+        );
+
+        if (isVisible) {
+          scrollToSelectedCard(localId);
+        }
+      }
+    }
+  );
+
   // Сброс выделения при изменении любого фильтра
-  watch([selectedLevel, occupancyFilter, searchQuery], () => {
-    selection.highlight.clear();
+  watch([selectedLevel, occupancyFilter, searchQuery], async () => {
+    await selection.highlight.clear();
   });
+
+  // Загрузка рабочих мест из модели
+  const loadEmployeeWorkplaces = async (modelId: string) => {
+    try {
+      viewerStore.setEmployeeWorkplacesLoading(true);
+      viewerStore.setEmployeeWorkplaces([]);
+
+      const workplaces = await getEmployeeWorkplaces(modelId);
+      viewerStore.setEmployeeWorkplaces(workplaces);
+
+      console.log(
+        `Loaded employee workplaces: ${viewerStore.features.elementsData.employeeWorkplaces.data.length}`
+      );
+    } catch (error) {
+      console.error("Error loading employee workplaces:", error);
+      viewerStore.setEmployeeWorkplaces([]);
+    } finally {
+      viewerStore.setEmployeeWorkplacesLoading(false);
+    }
+  };
+
+  // Очистка данных рабочих мест
+  const clearWorkplaces = () => {
+    viewerStore.clearEmployeeWorkplaces();
+  };
 
   return {
     workplaceCards,
@@ -180,8 +268,12 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
     availableLevels,
     selectedLocalId,
 
-    handleCardHover,
-    handleCardClick,
-    handleCardLeave,
+    hoverWorkplace,
+    releaseHoverWorkplace,
+    selectWorkplaceById,
+
+    selectWorkplaceFromRoute,
+    loadEmployeeWorkplaces,
+    clearWorkplaces,
   };
 };

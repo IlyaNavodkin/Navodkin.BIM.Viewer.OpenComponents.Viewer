@@ -67,6 +67,7 @@ export interface IEmployeeViewerDataAccess {
   getEmployeeWorkplaces: (
     modelId: string
   ) => Promise<EmployeeWorkplaceViewData[]>;
+  getElementInfo: (modelId: string, localId: number) => Promise<any>;
 }
 
 export const useDataAccess = (): IEmployeeViewerDataAccess => {
@@ -262,6 +263,33 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
     return workplacesViewData;
   };
 
+  const getElementInfo = async (
+    modelId: string,
+    localId: number
+  ): Promise<any> => {
+    try {
+      const modelFromId = store.modelManager.fragmentManager?.list.get(
+        modelId.toString()
+      );
+      if (!modelFromId) {
+        throw new Error(`Model not found for modelId: ${modelId}`);
+      }
+
+      const itemsData = await modelFromId.getItemsData([localId], {
+        attributesDefault: false,
+        attributes: ["Name", "GlobalId", "Tag", "ObjectType"],
+      });
+
+      if (itemsData && itemsData.length > 0) {
+        return itemsData[0];
+      }
+      return null;
+    } catch (error) {
+      console.error("Error getting element information:", error);
+      return null;
+    }
+  };
+
   return {
     formatItemPsets,
     getPropertySet,
@@ -273,5 +301,6 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
 
     getLevels,
     getEmployeeWorkplaces,
+    getElementInfo,
   };
 };

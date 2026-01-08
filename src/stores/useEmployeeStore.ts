@@ -78,8 +78,13 @@ export const useEmployeeStore = defineStore("employee", () => {
     );
   };
 
+  const getEmployeeById = (id: string) => {
+    return employees.value.find((emp) => emp.id === id);
+  };
+
   return {
     employees,
     getEmployeeByWorkplaceNumber,
+    getEmployeeById,
   };
 });

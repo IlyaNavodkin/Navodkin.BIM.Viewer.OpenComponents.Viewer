@@ -3,13 +3,15 @@ import { FragmentsModel } from "@thatopen/fragments";
 import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
 import { useViewerCore } from "./core/useViewerCore";
 import { useModelManager } from "./core/useModelManager";
-import { useModelData } from "./data/useModelData";
+import { useLevels } from "./data/useLevels";
+import { useDataAccess } from "./data/useDataAccess";
 import { useSelection } from "./features/useSelection";
 import * as OBC from "@thatopen/components";
+import { useEmployeeWorkplace } from "./features/useEmployeeWorkplace";
 
 export interface IFacadeCore {
   setupViewer: (containerElement: HTMLDivElement) => Promise<void>;
-  disposeViewer: () => void;
+  disposeViewer: () => Promise<void>;
 }
 
 export interface IFacadeModelManager {
@@ -25,13 +27,12 @@ export interface IFacadeModelManager {
 
 export interface IFacadeModelData {
   getElementInfo: (modelId: string, localId: number) => Promise<any>;
-  getEntityData: (modelId: string, localId: number) => Promise<any>;
 }
 
 export interface IFacadeSelection {
-  clearHoverHighlight: () => void;
-  clearSelectionHighlight: () => void;
-  setSelectionHighlight: (modelIdMap: OBC.ModelIdMap) => void;
+  clearHoverHighlight: () => Promise<void>;
+  clearSelectionHighlight: () => Promise<void>;
+  setSelectionHighlight: (modelIdMap: OBC.ModelIdMap) => Promise<void>;
 }
 
 export interface IEmployeeViewerFacade {
@@ -46,8 +47,10 @@ export const useViewer = (): IEmployeeViewerFacade => {
 
   const core = useViewerCore();
   const modelManager = useModelManager();
-  const modelData = useModelData();
+  const levels = useLevels();
+  const dataAccess = useDataAccess();
   const selection = useSelection();
+  const employeeWorkplace = useEmployeeWorkplace();
 
   const loadedModel = computed(() => {
     return store.modelManager.model;
@@ -76,10 +79,11 @@ export const useViewer = (): IEmployeeViewerFacade => {
     selection.init();
   };
 
-  const disposeViewer = () => {
-    modelData.clear();
-    selection.highlight.clear();
-    selection.hover.clear();
+  const disposeViewer = async () => {
+    levels.clear();
+    employeeWorkplace.clearWorkplaces();
+    await selection.highlight.clear();
+    await selection.hover.clear();
     modelManager.dispose();
     core.dispose();
   };
@@ -89,15 +93,18 @@ export const useViewer = (): IEmployeeViewerFacade => {
     name: string
   ): Promise<FragmentsModel> => {
     if (store.modelManager.model) {
-      modelData.clear();
-      selection.highlight.clear();
-      selection.hover.clear();
+      levels.clear();
+      employeeWorkplace.clearWorkplaces();
+      await selection.highlight.clear();
+      await selection.hover.clear();
       modelManager.unload();
     }
 
     const model = await modelManager.loadModelByPath(path, name);
-    await modelData.loadLevels(model.modelId);
-    await modelData.loadEmployeeWorkplaces(model.modelId);
+    await levels.loadLevels(model.modelId);
+    await employeeWorkplace.loadEmployeeWorkplaces(model.modelId);
+    await employeeWorkplace.selectWorkplaceFromRoute();
+
     return model;
   };
 
@@ -109,8 +116,8 @@ export const useViewer = (): IEmployeeViewerFacade => {
     await loadIfc(path, file.name);
   };
 
-  onUnmounted(() => {
-    disposeViewer();
+  onUnmounted(async () => {
+    await disposeViewer();
   });
 
   return {
@@ -129,8 +136,7 @@ export const useViewer = (): IEmployeeViewerFacade => {
       handleFileChange,
     },
     modelDataAccess: {
-      getElementInfo: modelData.getElementInfo,
-      getEntityData: modelData.getEntityData,
+      getElementInfo: dataAccess.getElementInfo,
     },
     selection: {
       clearHoverHighlight: () => selection.hover.clear(),

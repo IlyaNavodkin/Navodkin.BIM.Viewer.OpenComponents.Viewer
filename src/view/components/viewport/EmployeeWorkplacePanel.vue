@@ -67,17 +67,30 @@ const handleCardClick = (localId: number) => {
   <div
     :class="[$style.panel, { [$style.collapsed]: isCollapsed }]"
     data-workplace-panel
+    @mousemove.stop
+    @mousedown.stop
+    @mouseup.stop
+    @click.stop
+    @dblclick.stop
+    @contextmenu.stop
+    @wheel.stop
   >
     <!-- Минимизированная панель -->
     <div
       v-if="isCollapsed"
       :class="$style.collapsedPanel"
       @click="toggleCollapse"
+      title="Развернуть панель"
     >
-      <div :class="$style.collapsedContent">
-        <span :class="$style.collapsedIcon">▶</span>
-        <span :class="$style.collapsedText">Рабочие места</span>
-      </div>
+      <svg :class="$style.collapsedIcon" viewBox="0 0 24 24" fill="none">
+        <path
+          d="M9 18L15 12L9 6"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
     </div>
 
     <!-- Развернутая панель -->
@@ -244,54 +257,37 @@ const handleCardClick = (localId: number) => {
 }
 
 .collapsedPanel {
-  width: 50px;
-  height: 100%;
+  width: 40px;
+  height: 40px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:hover {
     background: linear-gradient(135deg, #5568d3 0%, #653a8b 100%);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-    transform: translateX(-2px);
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    transform: translateX(-3px) scale(1.05);
+  }
+
+  &:active {
+    transform: translateX(-2px) scale(0.98);
   }
 }
 
-.collapsedContent {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 20px 0;
-}
-
 .collapsedIcon {
-  font-size: 16px;
+  width: 20px;
+  height: 20px;
   color: white;
-  margin-bottom: 16px;
-  transition: transform 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   .collapsedPanel:hover & {
     transform: translateX(2px);
   }
-}
-
-.collapsedText {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  color: white;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  white-space: nowrap;
 }
 
 .content {

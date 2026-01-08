@@ -3,18 +3,17 @@ import * as THREE from "three";
 import * as OBF from "@thatopen/components-front";
 import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
 import { useDataAccess } from "../data/useDataAccess";
-import { RenderedFaces } from "@thatopen/fragments";
 
 export const SELECT_PLACEMENT_HIGHLIGHTER_NAME = "selectPlacement";
 
 export interface IEmployeeViewerSelectionHighlight {
-  clear: () => void;
-  set: (modelIdMap: OBC.ModelIdMap) => void;
+  clear: () => Promise<void>;
+  set: (modelIdMap: OBC.ModelIdMap) => Promise<void>;
 }
 
 export interface IEmployeeViewerSelectionOutliner {
-  clear: () => void;
-  set: (modelIdMap: OBC.ModelIdMap) => void;
+  clear: () => Promise<void>;
+  set: (modelIdMap: OBC.ModelIdMap) => Promise<void>;
 }
 
 export interface IEmployeeViewerSelection {
@@ -30,21 +29,19 @@ export const useSelection = (): IEmployeeViewerSelection => {
   let raycaster: any = null;
 
   const init = () => {
-    if (!store.core.components || !store.core.currentWord) {
+    if (!store.core.components || !store.core.currentWorld) {
       throw new Error("Components and currentWord must be initialized");
     }
 
-    const world = store.core.currentWord as OBC.SimpleWorld<
+    const world = store.core.currentWorld as OBC.SimpleWorld<
       OBC.SimpleScene,
       OBC.SimpleCamera,
       OBF.PostproductionRenderer
     >;
-    store.features.selection.highlighter = store.core.components!.get(
-      OBF.Highlighter
-    );
+    const highlighter = store.core.components!.get(OBF.Highlighter);
 
-    // Настройка основного highlighter для выделения
-    store.features.selection.highlighter.setup({
+    // Настройка основного highlighter для выделения (как в документации)
+    highlighter.setup({
       world: world,
       selectName: SELECT_PLACEMENT_HIGHLIGHTER_NAME,
       selectEnabled: true,
@@ -53,12 +50,11 @@ export const useSelection = (): IEmployeeViewerSelection => {
         color: new THREE.Color("red"),
         opacity: 0.5,
         transparent: false,
-        renderedFaces: RenderedFaces.ONE,
+        renderedFaces: 0,
       },
-      autoUpdateFragments: true,
     });
 
-    store.features.selection.allPlacementsOutliner = createOutliner(
+    const outliner = createOutliner(
       new THREE.Color("#8B0000"),
       3,
       new THREE.Color("#8B0000"),
@@ -66,7 +62,11 @@ export const useSelection = (): IEmployeeViewerSelection => {
       world
     );
 
-    store.features.selection.highlighter.updateColors();
+    if (outliner) {
+      store.initializeSelection(highlighter, outliner);
+    }
+
+    highlighter.updateColors();
 
     // Инициализация raycaster
     setupRaycaster(world);
@@ -116,56 +116,56 @@ export const useSelection = (): IEmployeeViewerSelection => {
   }
 
   const highlight: IEmployeeViewerSelectionHighlight = {
-    clear: () => {
+    clear: async () => {
       if (!store.features.selection.highlighter) return;
-      store.features.selection.highlighter!.clear(
+      await store.features.selection.highlighter!.clear(
         SELECT_PLACEMENT_HIGHLIGHTER_NAME
       );
-      store.features.selection.currentSelectedElement = undefined;
+      store.setCurrentSelectedElement(undefined);
     },
-    set: (modelIdMap: OBC.ModelIdMap) => {
+    set: async (modelIdMap: OBC.ModelIdMap) => {
       if (!store.features.selection.highlighter) return;
-      highlight.clear();
-      store.features.selection.highlighter!.highlightByID(
+
+      const newLocalId = Array.from(modelIdMap[Object.keys(modelIdMap)[0]])[0];
+      const currentLocalId =
+        store.features.selection.highlightedElement?.localId;
+
+      // Оптимизация: не перевыделяем тот же элемент
+      if (currentLocalId === newLocalId) return;
+
+      store.setCurrentSelectedElement({
+        modelId: Object.keys(modelIdMap)[0],
+        localId: newLocalId,
+      });
+      // Как в документации: только 3 параметра, без fillMesh
+      await store.features.selection.highlighter!.highlightByID(
         SELECT_PLACEMENT_HIGHLIGHTER_NAME,
         modelIdMap,
         true,
         true
       );
-      store.features.selection.currentSelectedElement = {
-        modelId: Object.keys(modelIdMap)[0],
-        localId: Array.from(modelIdMap[Object.keys(modelIdMap)[0]])[0],
-      };
     },
   };
 
   const hover: IEmployeeViewerSelectionOutliner = {
-    clear: () => {
-      if (!store.features.selection.allPlacementsOutliner) return;
-      store.features.selection.allPlacementsOutliner!.clean();
-      store.features.selection.currentHoveredElement = undefined;
+    clear: async () => {
+      if (!store.features.selection.outliner) return;
+      await store.features.selection.outliner!.clean();
+      store.setCurrentHoveredElement(undefined);
     },
-    set: (modelIdMap: OBC.ModelIdMap) => {
-      if (!store.features.selection.allPlacementsOutliner) return;
-      hover.clear();
-      store.features.selection.allPlacementsOutliner!.clean();
-      store.features.selection.allPlacementsOutliner!.addItems(modelIdMap);
-      store.features.selection.currentHoveredElement = {
+    set: async (modelIdMap: OBC.ModelIdMap) => {
+      if (!store.features.selection.outliner) return;
+      await hover.clear();
+      await store.features.selection.outliner!.addItems(modelIdMap);
+      store.setCurrentHoveredElement({
         modelId: Object.keys(modelIdMap)[0],
         localId: Array.from(modelIdMap[Object.keys(modelIdMap)[0]])[0],
-      };
+      });
     },
   };
 
-  const handleMouseOver = async (event: MouseEvent) => {
+  const handleMouseOver = async () => {
     if (!raycaster || !store.features.selection.highlighter) {
-      return;
-    }
-
-    // Проверяем, не находится ли курсор над панелью
-    const target = event.target as HTMLElement;
-    if (target.closest("[data-workplace-panel]")) {
-      // Если курсор над панелью - не обрабатываем hover
       return;
     }
 
@@ -181,7 +181,7 @@ export const useSelection = (): IEmployeeViewerSelection => {
             (workplace) => workplace.localId === localId
           )
         ) {
-          hover.clear();
+          await hover.clear();
           return;
         }
 
@@ -189,9 +189,9 @@ export const useSelection = (): IEmployeeViewerSelection => {
           [modelId]: new Set([localId]),
         };
 
-        hover.set(modelIdMap);
+        await hover.set(modelIdMap);
       } else {
-        hover.clear();
+        await hover.clear();
       }
     } catch (error) {
       console.warn("Error during raycast:", error);
@@ -232,11 +232,11 @@ export const useSelection = (): IEmployeeViewerSelection => {
             (workplace) => workplace.localId === localId
           )
         ) {
-          highlight.clear();
+          await highlight.clear();
           return;
         }
 
-        highlight.set(modelIdMap);
+        await highlight.set(modelIdMap);
       } else {
         console.log("=== Double Click ===");
         console.log("No object under cursor");

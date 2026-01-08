@@ -48,6 +48,7 @@ const getAvatarPlaceholder = (name: string | null) => {
       { [$style.cardVacant]: !card.isOccupied },
       { [$style.cardSelected]: isSelected },
     ]"
+    :data-workplace-card-id="card.localId"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
     @click="handleClick"
@@ -224,4 +225,3 @@ const getAvatarPlaceholder = (name: string | null) => {
   }
 }
 </style>
-

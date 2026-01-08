@@ -36,15 +36,15 @@ const handleOccupancyChange = (filter: string) => {
 };
 
 const handleCardHover = (localId: number | null) => {
-  employeeWorkplace.handleCardHover(localId);
+  employeeWorkplace.hoverWorkplace(localId);
 };
 
 const handleCardClick = (localId: number) => {
-  employeeWorkplace.handleCardClick(localId);
+  employeeWorkplace.selectWorkplaceById(localId);
 };
 
 const handleCardLeave = () => {
-  employeeWorkplace.handleCardLeave();
+  employeeWorkplace.releaseHoverWorkplace();
 };
 
 onMounted(async () => {

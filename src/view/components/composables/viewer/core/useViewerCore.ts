@@ -40,7 +40,6 @@ export const useViewerCore = (): IEmployeeViewerCore => {
     world.scene.three.background = null;
     world.renderer.postproduction.enabled = true;
     world.dynamicAnchor = false;
-    world.renderer.postproduction.style = PostproductionAspect.COLOR;
 
     components.init();
 
@@ -52,11 +51,8 @@ export const useViewerCore = (): IEmployeeViewerCore => {
       type: "text/javascript",
     });
 
-    store.core.workerUrl = URL.createObjectURL(workerFile);
-    store.core.currentWord = world;
-    store.core.components = components;
-    store.core.words = worlds;
-    store.core.container = containerElement;
+    const workerUrl = URL.createObjectURL(workerFile);
+    store.initializeCore(containerElement, components, worlds, world, workerUrl);
 
     console.log(store.core.workerUrl);
 
@@ -71,13 +67,12 @@ export const useViewerCore = (): IEmployeeViewerCore => {
         } catch (error) {
           console.warn("Error disposing worker URL:", error);
         }
-        store.core.workerUrl = undefined;
       }
 
-      if (store.core.currentWord) {
+      if (store.core.currentWorld) {
         try {
-          if (typeof store.core.currentWord.dispose === "function") {
-            store.core.currentWord.dispose();
+          if (typeof store.core.currentWorld.dispose === "function") {
+            store.core.currentWorld.dispose();
           }
         } catch (error) {
           console.warn("Error disposing world:", error);
@@ -92,10 +87,7 @@ export const useViewerCore = (): IEmployeeViewerCore => {
         }
       }
 
-      store.core.container = undefined;
-      store.core.components = undefined;
-      store.core.words = undefined;
-      store.core.currentWord = undefined;
+      store.clearCore();
     } catch (error) {
       console.error("Error disposing viewer core resources:", error);
     }
