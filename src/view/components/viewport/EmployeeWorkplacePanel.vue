@@ -18,9 +18,7 @@ interface Emits {
   (e: "update:selectedLevel", value: string): void;
   (e: "update:searchQuery", value: string): void;
   (e: "update:occupancyFilter", value: string): void;
-  (e: "cardHover", localId: number | null): void;
   (e: "cardClick", localId: number): void;
-  (e: "cardLeave"): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -49,14 +47,6 @@ const handleSearchInput = (event: Event) => {
 const handleOccupancyChange = (event: Event) => {
   const target = event.target as HTMLSelectElement;
   emit("update:occupancyFilter", target.value);
-};
-
-const handleCardMouseEnter = (localId: number) => {
-  emit("cardHover", localId);
-};
-
-const handleCardMouseLeave = () => {
-  emit("cardLeave");
 };
 
 const handleCardClick = (localId: number) => {
@@ -180,8 +170,6 @@ const handleCardClick = (localId: number) => {
             :key="card.localId"
             :card="card"
             :is-selected="props.selectedLocalId === card.localId"
-            @hover="handleCardMouseEnter"
-            @leave="handleCardMouseLeave"
             @click="handleCardClick"
           />
         </div>

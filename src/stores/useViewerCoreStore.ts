@@ -44,11 +44,7 @@ export const createViewerStore = (viewerId: string) => {
     const _loadingProgress = ref(0);
 
     // Selection
-    const _highlighter = shallowRef<OBF.Highlighter | undefined>(undefined);
     const _outliner = shallowRef<OBF.Outliner | undefined>(undefined);
-    const _hoveredElement = ref<
-      { modelId: string; localId: number } | undefined
-    >(undefined);
     const _highlightedElement = ref<
       { modelId: string; localId: number } | undefined
     >(undefined);
@@ -83,9 +79,7 @@ export const createViewerStore = (viewerId: string) => {
 
     const features = computed(() => ({
       selection: {
-        highlighter: _highlighter.value,
         outliner: _outliner.value,
-        hoveredElement: _hoveredElement.value,
         highlightedElement: _highlightedElement.value,
       },
       elementsData: {
@@ -217,18 +211,8 @@ export const createViewerStore = (viewerId: string) => {
     // SELECTION ACTIONS (мутации selection)
     // ========================================
 
-    function setHighlighter(highlighter: OBF.Highlighter | undefined) {
-      _highlighter.value = highlighter;
-    }
-
     function setAllPlacementsOutliner(outliner: OBF.Outliner | undefined) {
       _outliner.value = outliner;
-    }
-
-    function setCurrentHoveredElement(
-      element: { modelId: string; localId: number } | undefined
-    ) {
-      _hoveredElement.value = element;
     }
 
     function setCurrentSelectedElement(
@@ -237,18 +221,12 @@ export const createViewerStore = (viewerId: string) => {
       _highlightedElement.value = element;
     }
 
-    function initializeSelection(
-      highlighter: OBF.Highlighter,
-      outliner: OBF.Outliner
-    ) {
-      _highlighter.value = highlighter;
+    function initializeSelection(outliner: OBF.Outliner) {
       _outliner.value = outliner;
     }
 
     function clearSelection() {
-      _highlighter.value = undefined;
       _outliner.value = undefined;
-      _hoveredElement.value = undefined;
       _highlightedElement.value = undefined;
     }
 
@@ -357,9 +335,7 @@ export const createViewerStore = (viewerId: string) => {
       clearModelManager,
 
       // Selection actions
-      setHighlighter,
       setAllPlacementsOutliner,
-      setCurrentHoveredElement,
       setCurrentSelectedElement,
       initializeSelection,
       clearSelection,

@@ -63,16 +63,8 @@ const handleOccupancyChange = (filter: string) => {
   employeeWorkplace.occupancyFilter.value = filter;
 };
 
-const handleCardHover = (localId: number | null) => {
-  employeeWorkplace.hoverWorkplace(localId);
-};
-
 const handleCardClick = (localId: number) => {
   employeeWorkplace.selectWorkplaceById(localId);
-};
-
-const handleCardLeave = () => {
-  employeeWorkplace.releaseHoverWorkplace();
 };
 
 onMounted(async () => {
@@ -133,9 +125,7 @@ onUnmounted(() => {
             @update:selectedLevel="handleLevelChange"
             @update:searchQuery="handleSearchChange"
             @update:occupancyFilter="handleOccupancyChange"
-            @cardHover="handleCardHover"
             @cardClick="handleCardClick"
-            @cardLeave="handleCardLeave"
           />
         </div>
       </div>

@@ -30,7 +30,6 @@ export interface IFacadeModelData {
 }
 
 export interface IFacadeSelection {
-  clearHoverHighlight: () => Promise<void>;
   clearSelectionHighlight: () => Promise<void>;
   setSelectionHighlight: (modelIdMap: OBC.ModelIdMap) => Promise<void>;
 }
@@ -84,7 +83,6 @@ export const useViewer = (viewerId: string): IEmployeeViewerFacade => {
     levels.clear();
     employeeWorkplace.clearWorkplaces();
     await selection.highlight.clear();
-    await selection.hover.clear();
     modelManager.dispose();
     core.dispose();
   };
@@ -97,7 +95,6 @@ export const useViewer = (viewerId: string): IEmployeeViewerFacade => {
       levels.clear();
       employeeWorkplace.clearWorkplaces();
       await selection.highlight.clear();
-      await selection.hover.clear();
       modelManager.unload();
     }
 
@@ -140,7 +137,6 @@ export const useViewer = (viewerId: string): IEmployeeViewerFacade => {
       getElementInfo: dataAccess.getElementInfo,
     },
     selection: {
-      clearHoverHighlight: () => selection.hover.clear(),
       clearSelectionHighlight: () => selection.highlight.clear(),
       setSelectionHighlight: (modelIdMap: OBC.ModelIdMap) =>
         selection.highlight.set(modelIdMap),

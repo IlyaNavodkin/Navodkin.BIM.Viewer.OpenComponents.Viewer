@@ -16,21 +16,11 @@ interface Props {
 }
 
 interface Emits {
-  (e: "hover", localId: number): void;
-  (e: "leave"): void;
   (e: "click", localId: number): void;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
-
-const handleMouseEnter = () => {
-  emit("hover", props.card.localId);
-};
-
-const handleMouseLeave = () => {
-  emit("leave");
-};
 
 const handleClick = () => {
   emit("click", props.card.localId);
@@ -51,8 +41,6 @@ const getAvatarPlaceholder = (name: string | null) => {
       { [$style.cardSelected]: isSelected },
     ]"
     :data-workplace-card-id="card.localId"
-    @mouseenter="handleMouseEnter"
-    @mouseleave="handleMouseLeave"
     @click="handleClick"
   >
     <!-- Аватар -->

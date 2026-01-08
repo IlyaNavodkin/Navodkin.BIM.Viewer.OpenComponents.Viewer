@@ -16,9 +16,7 @@ export interface IEmployeeWorkplace {
   availableLevels: ComputedRef<LevelsViewData[]>;
   selectedLocalId: ComputedRef<number | null>;
 
-  hoverWorkplace: (localId: number | null) => Promise<void>;
   selectWorkplaceById: (localId: number) => Promise<void>;
-  releaseHoverWorkplace: () => Promise<void>;
   selectWorkplaceFromRoute: () => Promise<void>;
   loadEmployeeWorkplaces: (modelId: string) => Promise<void>;
   clearWorkplaces: () => void;
@@ -129,40 +127,6 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
     }
   };
 
-  // Обработка наведения на карточку
-  const hoverWorkplace = async (localId: number | null) => {
-    if (!viewerStore.modelManager.model) return;
-
-    if (localId === null) {
-      await selection.hover.clear();
-      return;
-    }
-
-    // Проверяем, что элемент является рабочим местом
-    const isWorkplace =
-      viewerStore.features.elementsData.employeeWorkplaces.data.some(
-        (workplace) => workplace.localId === localId
-      );
-
-    if (!isWorkplace) {
-      await selection.hover.clear();
-      return;
-    }
-
-    const modelId = viewerStore.modelManager.model.modelId;
-    const modelIdMap: OBC.ModelIdMap = {
-      [modelId]: new Set([localId]),
-    };
-
-    console.log("=== Card Hover ===");
-    console.log("LocalId:", localId);
-    console.log("ModelId:", modelId);
-    console.log("ModelIdMap:", modelIdMap);
-    console.log("==================");
-
-    await selection.hover.set(modelIdMap);
-  };
-
   // Обработка клика на карточку
   const selectWorkplaceById = async (localId: number) => {
     if (!viewerStore.modelManager.model) return;
@@ -191,11 +155,6 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
 
     // Устанавливаем выделение (без возможности сброса при повторном клике)
     await selection.highlight.set(modelIdMap);
-  };
-
-  // Обработка ухода курсора с карточки
-  const releaseHoverWorkplace = async () => {
-    await selection.hover.clear();
   };
 
   // Прокрутка к выбранной карточке
@@ -283,10 +242,7 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
     availableLevels,
     selectedLocalId,
 
-    hoverWorkplace,
-    releaseHoverWorkplace,
     selectWorkplaceById,
-
     selectWorkplaceFromRoute,
     loadEmployeeWorkplaces,
     clearWorkplaces,

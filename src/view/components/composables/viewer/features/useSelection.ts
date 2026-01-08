@@ -4,22 +4,13 @@ import * as OBF from "@thatopen/components-front";
 import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import { useDataAccess } from "../data/useDataAccess";
 
-export const SELECT_PLACEMENT_HIGHLIGHTER_NAME = "selectPlacement";
-
 export interface IEmployeeViewerSelectionHighlight {
-  clear: () => Promise<void>;
-  set: (modelIdMap: OBC.ModelIdMap) => Promise<void>;
-}
-
-export interface IEmployeeViewerSelectionOutliner {
   clear: () => Promise<void>;
   set: (modelIdMap: OBC.ModelIdMap) => Promise<void>;
 }
 
 export interface IEmployeeViewerSelection {
   highlight: IEmployeeViewerSelectionHighlight;
-  hover: IEmployeeViewerSelectionOutliner;
-
   init: () => void;
 }
 
@@ -39,21 +30,6 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
       OBC.SimpleCamera,
       OBF.PostproductionRenderer
     >;
-    const highlighter = store.core.components!.get(OBF.Highlighter);
-
-    // Настройка основного highlighter для выделения (как в документации)
-    highlighter.setup({
-      world: world,
-      selectName: SELECT_PLACEMENT_HIGHLIGHTER_NAME,
-      selectEnabled: true,
-      autoHighlightOnClick: false,
-      selectMaterialDefinition: {
-        color: new THREE.Color("red"),
-        opacity: 0.5,
-        transparent: false,
-        renderedFaces: 0,
-      },
-    });
 
     const outliner = createOutliner(
       new THREE.Color("#8B0000"),
@@ -64,12 +40,10 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
     );
 
     if (outliner) {
-      store.initializeSelection(highlighter, outliner);
+      store.initializeSelection(outliner);
     }
 
-    highlighter.updateColors();
-
-    // Инициализация raycaster
+    // Инициализация raycaster для двойного клика
     setupRaycaster(world);
   };
 
@@ -87,10 +61,7 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
     const casters = store.core.components.get(OBC.Raycasters);
     raycaster = casters.get(world);
 
-    // Автоматически включаем hover highlight
-    store.core.container.addEventListener("mousemove", handleMouseOver);
-
-    // Добавляем обработчик двойного клика
+    // Добавляем обработчик двойного клика для выбора элементов
     store.core.container.addEventListener("dblclick", handleDoubleClick);
   };
 
@@ -167,79 +138,21 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
       // Оптимизация: не перевыделяем тот же элемент
       if (currentLocalId === newLocalId) return;
 
+      // ВАЖНО: сначала очищаем визуальное выделение
+      await store.features.selection.outliner!.clean();
+
+      // Затем устанавливаем новый выбранный элемент
       store.setCurrentSelectedElement({
         modelId: Object.keys(modelIdMap)[0],
         localId: newLocalId,
       });
 
-      await highlight.clear();
+      // Добавляем визуальное выделение
       await store.features.selection.outliner!.addItems(modelIdMap);
 
       // Перемещаем камеру к выбранному объекту
       await fitCameraToSelection(modelIdMap);
     },
-  };
-
-  // Теперь hover использует highlighter (для наведения)
-  const hover: IEmployeeViewerSelectionOutliner = {
-    clear: async () => {
-      if (!store.features.selection.highlighter) return;
-      await store.features.selection.highlighter!.clear(
-        SELECT_PLACEMENT_HIGHLIGHTER_NAME
-      );
-      store.setCurrentHoveredElement(undefined);
-    },
-    set: async (modelIdMap: OBC.ModelIdMap) => {
-      if (!store.features.selection.highlighter) return;
-      await hover.clear();
-
-      // Используем highlighter для наведения
-      await store.features.selection.highlighter!.highlightByID(
-        SELECT_PLACEMENT_HIGHLIGHTER_NAME,
-        modelIdMap,
-        true,
-        false
-      );
-
-      store.setCurrentHoveredElement({
-        modelId: Object.keys(modelIdMap)[0],
-        localId: Array.from(modelIdMap[Object.keys(modelIdMap)[0]])[0],
-      });
-    },
-  };
-
-  const handleMouseOver = async () => {
-    if (!raycaster || !store.features.selection.highlighter) {
-      return;
-    }
-
-    try {
-      const result = (await raycaster.castRay()) as any;
-
-      if (result && result.object) {
-        const modelId = result.fragments.modelId;
-        const localId = result.localId;
-
-        if (
-          !store.features.elementsData.employeeWorkplaces.data.some(
-            (workplace) => workplace.localId === localId
-          )
-        ) {
-          await hover.clear();
-          return;
-        }
-
-        const modelIdMap = {
-          [modelId]: new Set([localId]),
-        };
-
-        await hover.set(modelIdMap);
-      } else {
-        await hover.clear();
-      }
-    } catch (error) {
-      console.warn("Error during raycast:", error);
-    }
   };
 
   const handleDoubleClick = async () => {
@@ -293,8 +206,6 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
 
   return {
     init,
-
     highlight,
-    hover,
   };
 };
