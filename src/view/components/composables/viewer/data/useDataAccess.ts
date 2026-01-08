@@ -1,6 +1,6 @@
 import { ItemAttribute, ItemData } from "@thatopen/fragments";
 import * as FRAGS from "@thatopen/fragments";
-import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
+import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 
 export type PropertySet = {
   name: string;
@@ -36,7 +36,7 @@ export type EmployeeWorkplaceViewData = {
   localId: number;
   category: string;
   workplaceNumber: string;
-  level: string;
+  level: LevelsViewData | null;
 };
 
 export type EntityData = {
@@ -65,13 +65,19 @@ export interface IEmployeeViewerDataAccess {
   getSpatialStructure: (modelId: string) => Promise<FRAGS.SpatialTreeItem>;
   getLevels: (modelId: string) => Promise<LevelsViewData[]>;
   getEmployeeWorkplaces: (
-    modelId: string
+    modelId: string,
+    levels: LevelsViewData[]
   ) => Promise<EmployeeWorkplaceViewData[]>;
   getElementInfo: (modelId: string, localId: number) => Promise<any>;
 }
 
-export const useDataAccess = (): IEmployeeViewerDataAccess => {
-  const store = useIFCViewerStore();
+const constrantGroupName = "Constraints";
+const identityGroupName = "Identity Data";
+const levelPrefix = "Level: ";
+
+export const useDataAccess = (viewerId: string): IEmployeeViewerDataAccess => {
+  const viewerManager = useViewerManagerStore();
+  const store = viewerManager.getViewer(viewerId);
   const formatItemPsets = (rawPsets: FRAGS.ItemData[]) => {
     const result: Record<string, Record<string, any>> = {};
 
@@ -217,7 +223,10 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
     return levelsViewData;
   };
 
-  const getEmployeeWorkplaces = async (modelId: string) => {
+  const getEmployeeWorkplaces = async (
+    modelId: string,
+    levels: LevelsViewData[]
+  ) => {
     const modelFromId = store.modelManager.fragmentManager?.list.get(modelId);
     if (!modelFromId) {
       throw new Error(`Model not found for modelId: ${modelId}`);
@@ -245,15 +254,22 @@ export const useDataAccess = (): IEmployeeViewerDataAccess => {
             modelId
           );
           console.log("Properties:", properties);
-          const workplaceNumber = properties["Identity Data"]?.Comments;
-          const level = properties["Constraints"]?.Level;
-          if (workplaceNumber && level) {
+          const workplaceNumber = properties[identityGroupName]?.Comments;
+          const levelName = properties[constrantGroupName]?.Level;
+          const levelsNameWithoutPrefix = levelName?.replace(levelPrefix, "");
+
+          if (workplaceNumber) {
+            // Находим соответствующий уровень по имени
+            const levelData = levelsNameWithoutPrefix
+              ? levels.find((l) => l.name === levelsNameWithoutPrefix) ?? null
+              : null;
+
             workplacesViewData.push({
               localId: (item._localId as ItemAttribute)?.value as number,
               category:
                 (item._category as ItemAttribute)?.value?.toString() ?? "",
               workplaceNumber: workplaceNumber,
-              level: level,
+              level: levelData,
             });
           }
         }

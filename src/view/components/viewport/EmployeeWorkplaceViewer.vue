@@ -1,25 +1,53 @@
 ﻿<script lang="ts" setup>
 import { ref, onMounted, onUnmounted, computed } from "vue";
+import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import { useViewer } from "@/view/components/composables/viewer/useViewerFacade";
 import { useEmployeeWorkplace } from "@/view/components/composables/viewer/features/useEmployeeWorkplace";
 import LoadingScreen from "./common/LoadingScreen.vue";
 import EmployeeWorkplacePanel from "./EmployeeWorkplacePanel.vue";
 
-const containerRef = ref<HTMLDivElement | null>(null);
+const props = defineProps<{
+  viewerId: string;
+}>();
 
-const viewer = useViewer();
-const employeeWorkplace = useEmployeeWorkplace();
+const containerRef = ref<HTMLDivElement | null>(null);
+// Состояние загрузки самого компонента
+const isComponentLoading = ref(true);
+
+// Получаем менеджер вьюверов и создаем стор для этого вьювера
+const viewerManager = useViewerManagerStore();
+viewerManager.createViewer(props.viewerId);
+
+// Передаем viewerId в композаблы
+const viewer = useViewer(props.viewerId);
+const employeeWorkplace = useEmployeeWorkplace(props.viewerId);
 
 const isModelLoaded = computed(() => {
   return viewer.modelManager.isModelLoaded.value;
 });
 
-const isLoading = computed(() => {
+const isModelLoading = computed(() => {
   return viewer.modelManager.isLoading.value;
+});
+
+// Объединенное состояние загрузки (компонент или модель)
+const isLoading = computed(() => {
+  return isComponentLoading.value || isModelLoading.value;
 });
 
 const loadingProgress = computed(() => {
   return viewer.modelManager.loadingProgress.value;
+});
+
+// Текст загрузки в зависимости от состояния
+const loadingText = computed(() => {
+  if (isComponentLoading.value) {
+    return "Загрузка компонента...";
+  }
+  if (isModelLoading.value) {
+    return "Загрузка модели...";
+  }
+  return "Загрузка...";
 });
 
 // Обработчики событий от панели
@@ -50,6 +78,7 @@ const handleCardLeave = () => {
 onMounted(async () => {
   if (!containerRef.value) {
     console.error("Container element not found");
+    isComponentLoading.value = false;
     return;
   }
 
@@ -57,17 +86,26 @@ onMounted(async () => {
     await viewer.core.setupViewer(containerRef.value);
   } catch (error) {
     console.error("Error initializing viewer:", error);
+  } finally {
+    // Компонент загружен, viewer инициализирован
+    isComponentLoading.value = false;
   }
 });
 
 onUnmounted(() => {
   viewer.core.disposeViewer();
+  // Освобождаем ресурсы стора и удаляем из реестра
+  viewerManager.disposeViewer(props.viewerId);
 });
 </script>
 
 <template>
   <div :class="$style.root" tabindex="0">
-    <LoadingScreen v-if="isLoading" :progress="loadingProgress" />
+    <LoadingScreen
+      v-if="isLoading"
+      :progress="loadingProgress"
+      :loading-text="loadingText"
+    />
 
     <div :class="$style.layout">
       <div :class="$style.mainContent">

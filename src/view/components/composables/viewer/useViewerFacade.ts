@@ -1,6 +1,6 @@
 import { computed, onUnmounted, type ComputedRef } from "vue";
 import { FragmentsModel } from "@thatopen/fragments";
-import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
+import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import { useViewerCore } from "./core/useViewerCore";
 import { useModelManager } from "./core/useModelManager";
 import { useLevels } from "./data/useLevels";
@@ -42,15 +42,16 @@ export interface IEmployeeViewerFacade {
   selection: IFacadeSelection;
 }
 
-export const useViewer = (): IEmployeeViewerFacade => {
-  const store = useIFCViewerStore();
+export const useViewer = (viewerId: string): IEmployeeViewerFacade => {
+  const viewerManager = useViewerManagerStore();
+  const store = viewerManager.getViewer(viewerId);
 
-  const core = useViewerCore();
-  const modelManager = useModelManager();
-  const levels = useLevels();
-  const dataAccess = useDataAccess();
-  const selection = useSelection();
-  const employeeWorkplace = useEmployeeWorkplace();
+  const core = useViewerCore(viewerId);
+  const modelManager = useModelManager(viewerId);
+  const levels = useLevels(viewerId);
+  const dataAccess = useDataAccess(viewerId);
+  const selection = useSelection(viewerId);
+  const employeeWorkplace = useEmployeeWorkplace(viewerId);
 
   const loadedModel = computed(() => {
     return store.modelManager.model;

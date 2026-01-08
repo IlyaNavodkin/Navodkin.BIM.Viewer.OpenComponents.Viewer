@@ -1,8 +1,8 @@
 import { ref, computed, watch, type Ref, type ComputedRef } from "vue";
-import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
+import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import { useEmployeeStore } from "@/stores/useEmployeeStore";
 import { useSelection } from "./useSelection";
-import { useDataAccess } from "../data/useDataAccess";
+import { useDataAccess, type LevelsViewData } from "../data/useDataAccess";
 import * as OBC from "@thatopen/components";
 import type { WorkplaceCardData } from "@/view/components/viewport/WorkplaceCard.vue";
 import { useRoute } from "vue-router";
@@ -13,7 +13,7 @@ export interface IEmployeeWorkplace {
   selectedLevel: Ref<string>;
   searchQuery: Ref<string>;
   occupancyFilter: Ref<string>;
-  availableLevels: ComputedRef<string[]>;
+  availableLevels: ComputedRef<LevelsViewData[]>;
   selectedLocalId: ComputedRef<number | null>;
 
   hoverWorkplace: (localId: number | null) => Promise<void>;
@@ -24,12 +24,13 @@ export interface IEmployeeWorkplace {
   clearWorkplaces: () => void;
 }
 
-export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
+export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
   const route = useRoute();
-  const viewerStore = useIFCViewerStore();
+  const viewerManager = useViewerManagerStore();
+  const viewerStore = viewerManager.getViewer(viewerId);
   const employeeStore = useEmployeeStore();
-  const selection = useSelection();
-  const { getEmployeeWorkplaces } = useDataAccess();
+  const selection = useSelection(viewerId);
+  const { getEmployeeWorkplaces } = useDataAccess(viewerId);
 
   const selectedLevel = ref<string>("all");
   const searchQuery = ref<string>("");
@@ -61,22 +62,30 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
     });
   });
 
-  // Список доступных уровней
-  const availableLevels = computed<string[]>(() => {
-    const levels = new Set<string>();
+  // Список доступных уровней (отсортированных по высоте от нижнего к верхнему)
+  const availableLevels = computed<LevelsViewData[]>(() => {
+    const levelsMap = new Map<string, LevelsViewData>();
+
     workplaceCards.value.forEach((card) => {
-      levels.add(card.level);
+      if (card.level && !levelsMap.has(card.level.name)) {
+        levelsMap.set(card.level.name, card.level);
+      }
     });
-    return Array.from(levels).sort();
+
+    return Array.from(levelsMap.values()).sort(
+      (a, b) => a.elevation - b.elevation
+    );
   });
 
-  // Фильтрованные карточки
+  // Фильтрованные карточки (сортировка по elevation от нижнего к верхнему)
   const filteredWorkplaceCards = computed<WorkplaceCardData[]>(() => {
     let filtered = workplaceCards.value;
 
     // Фильтр по уровню
     if (selectedLevel.value !== "all") {
-      filtered = filtered.filter((card) => card.level === selectedLevel.value);
+      filtered = filtered.filter(
+        (card) => card.level?.name === selectedLevel.value
+      );
     }
 
     // Фильтр по занятости
@@ -94,12 +103,16 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
       filtered = filtered.filter(
         (card) =>
           card.workplaceNumber.toLowerCase().includes(query) ||
-          card.level.toLowerCase().includes(query) ||
+          (card.level?.name && card.level.name.toLowerCase().includes(query)) ||
           (card.employeeName && card.employeeName.toLowerCase().includes(query))
       );
     }
 
-    return filtered;
+    // Сортируем по высоте (от нижнего к верхнему)
+    return filtered.sort((a, b) => {
+      if (!a.level || !b.level) return 0;
+      return a.level.elevation - b.level.elevation;
+    });
   });
 
   const selectWorkplaceFromRoute = async () => {
@@ -240,7 +253,9 @@ export const useEmployeeWorkplace = (): IEmployeeWorkplace => {
       viewerStore.setEmployeeWorkplacesLoading(true);
       viewerStore.setEmployeeWorkplaces([]);
 
-      const workplaces = await getEmployeeWorkplaces(modelId);
+      // Получаем уровни из store для сопоставления
+      const levels = viewerStore.features.elementsData.levels.data;
+      const workplaces = await getEmployeeWorkplaces(modelId, levels);
       viewerStore.setEmployeeWorkplaces(workplaces);
 
       console.log(

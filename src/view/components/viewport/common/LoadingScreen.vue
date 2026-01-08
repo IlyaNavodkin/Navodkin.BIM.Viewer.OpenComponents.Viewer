@@ -2,7 +2,7 @@
   <div :class="$style.loadingScreen">
     <div :class="$style.loadingContent">
       <div :class="$style.spinner"></div>
-      <div :class="$style.loadingText">Loading model...</div>
+      <div :class="$style.loadingText">{{ loadingText }}</div>
       <div :class="$style.progressBar">
         <div
           :class="$style.progressFill"
@@ -19,16 +19,19 @@ import { computed } from "vue";
 
 interface Props {
   progress: number;
+  loadingText?: string;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  loadingText: "Загрузка...",
+});
 
 const progress = computed(() => props.progress);
 </script>
 
 <style module lang="scss">
 .loadingScreen {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;

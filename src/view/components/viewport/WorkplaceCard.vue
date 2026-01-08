@@ -1,8 +1,10 @@
 <script lang="ts" setup>
+import type { LevelsViewData } from "@/view/components/composables/viewer/data/useDataAccess";
+
 export type WorkplaceCardData = {
   localId: number;
   workplaceNumber: string;
-  level: string;
+  level: LevelsViewData | null;
   employeeName: string | null;
   employeeAvatarUrl: string | null;
   isOccupied: boolean;
@@ -73,7 +75,9 @@ const getAvatarPlaceholder = (name: string | null) => {
       </div>
       <div :class="$style.cardDetails">
         <span :class="$style.cardWorkplace">{{ card.workplaceNumber }}</span>
-        <span :class="$style.cardLevel">{{ card.level }}</span>
+        <span v-if="card.level" :class="$style.cardLevel">{{
+          card.level.name
+        }}</span>
       </div>
     </div>
 

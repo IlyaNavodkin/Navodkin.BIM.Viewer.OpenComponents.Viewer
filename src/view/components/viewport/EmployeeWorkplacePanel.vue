@@ -2,10 +2,11 @@
 import { ref } from "vue";
 import WorkplaceCard from "./WorkplaceCard.vue";
 import type { WorkplaceCardData } from "./WorkplaceCard.vue";
+import type { LevelsViewData } from "@/view/components/composables/viewer/data/useDataAccess";
 
 interface Props {
   workplaceCards: WorkplaceCardData[];
-  availableLevels: string[];
+  availableLevels: LevelsViewData[];
   selectedLevel: string;
   searchQuery: string;
   occupancyFilter: string;
@@ -121,10 +122,10 @@ const handleCardClick = (localId: number) => {
               <option value="all">Все уровни</option>
               <option
                 v-for="level in props.availableLevels"
-                :key="level"
-                :value="level"
+                :key="level.localId"
+                :value="level.name"
               >
-                {{ level }}
+                {{ level.name }} (↑ {{ level.elevation.toFixed(2) }}м)
               </option>
             </select>
           </div>

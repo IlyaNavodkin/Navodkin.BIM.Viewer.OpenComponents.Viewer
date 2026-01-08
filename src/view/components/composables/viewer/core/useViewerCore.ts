@@ -1,15 +1,16 @@
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
 import { PostproductionAspect } from "@thatopen/components-front";
-import { useIFCViewerStore } from "../../../../../stores/useViewerCoreStore";
+import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 
 export interface IEmployeeViewerCore {
   init: (containerElement: HTMLDivElement) => Promise<void>;
   dispose: () => void;
 }
 
-export const useViewerCore = (): IEmployeeViewerCore => {
-  const store = useIFCViewerStore();
+export const useViewerCore = (viewerId: string): IEmployeeViewerCore => {
+  const viewerManager = useViewerManagerStore();
+  const store = viewerManager.getViewer(viewerId);
 
   const init = async (containerElement: HTMLDivElement) => {
     if (!containerElement) {
@@ -43,16 +44,22 @@ export const useViewerCore = (): IEmployeeViewerCore => {
 
     components.init();
 
-    const githubUrl =
-      "https://thatopen.github.io/engine_fragment/resources/worker.mjs";
-    const fetchedUrl = await fetch(githubUrl);
+    // Используем локальный worker.mjs из public директории
+    const localWorkerPath = "/that-open/resources/worker.mjs";
+    const fetchedUrl = await fetch(localWorkerPath);
     const workerBlob = await fetchedUrl.blob();
     const workerFile = new File([workerBlob], "worker.mjs", {
       type: "text/javascript",
     });
 
     const workerUrl = URL.createObjectURL(workerFile);
-    store.initializeCore(containerElement, components, worlds, world, workerUrl);
+    store.initializeCore(
+      containerElement,
+      components,
+      worlds,
+      world,
+      workerUrl
+    );
 
     console.log(store.core.workerUrl);
 

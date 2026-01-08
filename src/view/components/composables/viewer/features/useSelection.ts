@@ -1,7 +1,7 @@
 import * as OBC from "@thatopen/components";
 import * as THREE from "three";
 import * as OBF from "@thatopen/components-front";
-import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
+import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import { useDataAccess } from "../data/useDataAccess";
 
 export const SELECT_PLACEMENT_HIGHLIGHTER_NAME = "selectPlacement";
@@ -23,9 +23,10 @@ export interface IEmployeeViewerSelection {
   init: () => void;
 }
 
-export const useSelection = (): IEmployeeViewerSelection => {
-  const store = useIFCViewerStore();
-  const dataAccess = useDataAccess();
+export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
+  const viewerManager = useViewerManagerStore();
+  const store = viewerManager.getViewer(viewerId);
+  const dataAccess = useDataAccess(viewerId);
   let raycaster: any = null;
 
   const init = () => {
@@ -115,16 +116,49 @@ export const useSelection = (): IEmployeeViewerSelection => {
     return outliner;
   }
 
+  // Функция для перемещения камеры к выбранному объекту
+  const fitCameraToSelection = async (modelIdMap: OBC.ModelIdMap) => {
+    if (!store.core.components || !store.core.currentWorld) return;
+
+    const world = store.core.currentWorld as OBC.SimpleWorld<
+      OBC.SimpleScene,
+      OBC.SimpleCamera,
+      OBF.PostproductionRenderer
+    >;
+
+    try {
+      const boxer = store.core.components.get(OBC.BoundingBoxer);
+
+      // Получаем bounding box для выбранных элементов
+      boxer.list.clear();
+      await boxer.addFromModelIdMap(modelIdMap);
+      const box = boxer.get();
+      boxer.list.clear();
+
+      if (box) {
+        // Вычисляем сферу из bounding box
+        const sphere = new THREE.Sphere();
+        box.getBoundingSphere(sphere);
+
+        // Перемещаем камеру к сфере
+        if (world.camera.hasCameraControls()) {
+          await world.camera.controls.fitToSphere(sphere, true);
+        }
+      }
+    } catch (error) {
+      console.warn("Error fitting camera to selection:", error);
+    }
+  };
+
+  // Теперь highlight использует outliner (для клика/выбора)
   const highlight: IEmployeeViewerSelectionHighlight = {
     clear: async () => {
-      if (!store.features.selection.highlighter) return;
-      await store.features.selection.highlighter!.clear(
-        SELECT_PLACEMENT_HIGHLIGHTER_NAME
-      );
+      if (!store.features.selection.outliner) return;
+      await store.features.selection.outliner!.clean();
       store.setCurrentSelectedElement(undefined);
     },
     set: async (modelIdMap: OBC.ModelIdMap) => {
-      if (!store.features.selection.highlighter) return;
+      if (!store.features.selection.outliner) return;
 
       const newLocalId = Array.from(modelIdMap[Object.keys(modelIdMap)[0]])[0];
       const currentLocalId =
@@ -137,26 +171,36 @@ export const useSelection = (): IEmployeeViewerSelection => {
         modelId: Object.keys(modelIdMap)[0],
         localId: newLocalId,
       });
-      // Как в документации: только 3 параметра, без fillMesh
+
+      await highlight.clear();
+      await store.features.selection.outliner!.addItems(modelIdMap);
+
+      // Перемещаем камеру к выбранному объекту
+      await fitCameraToSelection(modelIdMap);
+    },
+  };
+
+  // Теперь hover использует highlighter (для наведения)
+  const hover: IEmployeeViewerSelectionOutliner = {
+    clear: async () => {
+      if (!store.features.selection.highlighter) return;
+      await store.features.selection.highlighter!.clear(
+        SELECT_PLACEMENT_HIGHLIGHTER_NAME
+      );
+      store.setCurrentHoveredElement(undefined);
+    },
+    set: async (modelIdMap: OBC.ModelIdMap) => {
+      if (!store.features.selection.highlighter) return;
+      await hover.clear();
+
+      // Используем highlighter для наведения
       await store.features.selection.highlighter!.highlightByID(
         SELECT_PLACEMENT_HIGHLIGHTER_NAME,
         modelIdMap,
         true,
-        true
+        false
       );
-    },
-  };
 
-  const hover: IEmployeeViewerSelectionOutliner = {
-    clear: async () => {
-      if (!store.features.selection.outliner) return;
-      await store.features.selection.outliner!.clean();
-      store.setCurrentHoveredElement(undefined);
-    },
-    set: async (modelIdMap: OBC.ModelIdMap) => {
-      if (!store.features.selection.outliner) return;
-      await hover.clear();
-      await store.features.selection.outliner!.addItems(modelIdMap);
       store.setCurrentHoveredElement({
         modelId: Object.keys(modelIdMap)[0],
         localId: Array.from(modelIdMap[Object.keys(modelIdMap)[0]])[0],

@@ -1,6 +1,6 @@
 import * as OBC from "@thatopen/components";
 import { FragmentsModel, IfcImporter, LodMode } from "@thatopen/fragments";
-import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
+import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import { PostproductionAspect } from "@thatopen/components-front";
 
 export interface IEmployeeViewerModelManager {
@@ -11,8 +11,11 @@ export interface IEmployeeViewerModelManager {
   dispose: () => void;
 }
 
-export const useModelManager = (): IEmployeeViewerModelManager => {
-  const store = useIFCViewerStore();
+export const useModelManager = (
+  viewerId: string
+): IEmployeeViewerModelManager => {
+  const viewerManager = useViewerManagerStore();
+  const store = viewerManager.getViewer(viewerId);
 
   const init = async () => {
     if (

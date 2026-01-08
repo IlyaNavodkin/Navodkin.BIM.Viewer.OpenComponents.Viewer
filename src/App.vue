@@ -1,15 +1,18 @@
 <template>
   <div id="app">
     <div class="header">
-      <h1>Vue + Pinia + TypeScript + ThatOpen Components</h1>
+      <h1>Multi-Instance Viewer Test - 2 Independent Viewers</h1>
       <div class="controls">
         <button @click="handleGreet">Greet</button>
         <button @click="handleGetComponent">Get Component</button>
         <p v-if="message">{{ message }}</p>
       </div>
     </div>
-    <div class="viewport-container">
-      <EmployeeWorkplaceViewer />
+    <div class="viewers-container">
+      <div v-if="viewerId" class="viewer-wrapper">
+        <div class="viewer-label">Viewer 1: {{ viewerId }}</div>
+        <EmployeeWorkplaceViewer :viewer-id="viewerId" />
+      </div>
     </div>
   </div>
 </template>
@@ -17,14 +20,22 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import * as OBC from "@thatopen/components";
+import { v4 as uuidv4 } from "uuid";
 import { HelloWorldComponent } from "@/view-models/components";
+import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import EmployeeWorkplaceViewer from "@/view/components/viewport/EmployeeWorkplaceViewer.vue";
+
+// ID вьюверов будут сгенерированы в onMounted
+const viewerId = ref<string>("");
 
 const message = ref<string>("");
 let components: OBC.Components | null = null;
 let helloWorldComponent: HelloWorldComponent | null = null;
 
 onMounted(async () => {
+  // Генерируем уникальные ID для каждого вьювера
+  viewerId.value = uuidv4();
+
   components = new OBC.Components();
 
   helloWorldComponent = new HelloWorldComponent(components);
@@ -41,6 +52,13 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  // Dispose вьюверов
+  const viewerManager = useViewerManagerStore();
+  if (viewerId.value) {
+    viewerManager.disposeViewer(viewerId.value);
+  }
+
+  // Dispose компонентов
   if (helloWorldComponent) {
     helloWorldComponent.dispose();
   }
@@ -87,7 +105,7 @@ const handleGetComponent = async () => {
 
 .header h1 {
   margin: 0 0 15px 0;
-  font-size: 24px;
+  font-size: 20px;
   color: #2c3e50;
 }
 
@@ -99,8 +117,8 @@ const handleGetComponent = async () => {
 }
 
 button {
-  padding: 10px 20px;
-  font-size: 16px;
+  padding: 8px 16px;
+  font-size: 14px;
   cursor: pointer;
   background-color: #42b983;
   color: white;
@@ -115,17 +133,40 @@ button:hover {
 
 p {
   margin: 0;
-  padding: 10px;
+  padding: 8px;
   background-color: #f0f0f0;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 12px;
 }
 
-.viewport-container {
+.viewers-container {
   flex: 1;
+  display: flex;
+  gap: 20px;
   padding: 20px;
   overflow: hidden;
-  display: flex;
   min-height: 0;
+}
+
+.viewer-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f9f9f9;
+}
+
+.viewer-label {
+  padding: 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+  text-align: center;
+  letter-spacing: 0.5px;
+  font-family: "Courier New", monospace;
 }
 </style>

@@ -1,14 +1,15 @@
 import { useDataAccess } from "./useDataAccess";
-import { useIFCViewerStore } from "@/stores/useViewerCoreStore";
+import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 
 export interface ILevels {
   loadLevels: (modelId: string) => Promise<void>;
   clear: () => void;
 }
 
-export const useLevels = (): ILevels => {
-  const { getLevels } = useDataAccess();
-  const store = useIFCViewerStore();
+export const useLevels = (viewerId: string): ILevels => {
+  const { getLevels } = useDataAccess(viewerId);
+  const viewerManager = useViewerManagerStore();
+  const store = viewerManager.getViewer(viewerId);
 
   const loadLevels = async (modelId: string) => {
     try {
