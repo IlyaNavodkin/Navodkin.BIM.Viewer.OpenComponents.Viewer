@@ -43,7 +43,6 @@ const getAvatarPlaceholder = (name: string | null) => {
     :data-workplace-card-id="card.localId"
     @click="handleClick"
   >
-    <!-- Аватар -->
     <div :class="$style.cardAvatar">
       <img
         v-if="card.employeeAvatarUrl"
@@ -56,7 +55,6 @@ const getAvatarPlaceholder = (name: string | null) => {
       </div>
     </div>
 
-    <!-- Информация -->
     <div :class="$style.cardInfo">
       <div :class="$style.cardName">
         {{ card.employeeName || "Свободно" }}
@@ -69,7 +67,6 @@ const getAvatarPlaceholder = (name: string | null) => {
       </div>
     </div>
 
-    <!-- Индикатор статуса -->
     <div
       :class="[
         $style.cardStatus,
@@ -123,11 +120,7 @@ const getAvatarPlaceholder = (name: string | null) => {
   &.cardSelected {
     border-color: #667eea;
     border-width: 3px;
-    background: linear-gradient(
-      135deg,
-      rgba(102, 126, 234, 0.05) 0%,
-      rgba(118, 75, 162, 0.05) 100%
-    );
+    background: rgba(102, 126, 234, 0.05);
     box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
 
     &:hover {
@@ -163,7 +156,7 @@ const getAvatarPlaceholder = (name: string | null) => {
   justify-content: center;
   font-size: 20px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   color: white;
 }
 

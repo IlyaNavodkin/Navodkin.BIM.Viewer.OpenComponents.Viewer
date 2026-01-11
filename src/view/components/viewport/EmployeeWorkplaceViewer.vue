@@ -11,14 +11,11 @@ const props = defineProps<{
 }>();
 
 const containerRef = ref<HTMLDivElement | null>(null);
-// Состояние загрузки самого компонента
 const isComponentLoading = ref(true);
 
-// Получаем менеджер вьюверов и создаем стор для этого вьювера
 const viewerManager = useViewerManagerStore();
 viewerManager.createViewer(props.viewerId);
 
-// Передаем viewerId в композаблы
 const viewer = useViewer(props.viewerId);
 const employeeWorkplace = useEmployeeWorkplace(props.viewerId);
 
@@ -30,7 +27,6 @@ const isModelLoading = computed(() => {
   return viewer.modelManager.isLoading.value;
 });
 
-// Объединенное состояние загрузки (компонент или модель)
 const isLoading = computed(() => {
   return isComponentLoading.value || isModelLoading.value;
 });
@@ -39,7 +35,6 @@ const loadingProgress = computed(() => {
   return viewer.modelManager.loadingProgress.value;
 });
 
-// Текст загрузки в зависимости от состояния
 const loadingText = computed(() => {
   if (isComponentLoading.value) {
     return "Загрузка компонента...";
@@ -50,7 +45,6 @@ const loadingText = computed(() => {
   return "Загрузка...";
 });
 
-// Обработчики событий от панели
 const handleLevelChange = (level: string) => {
   employeeWorkplace.selectedLevel.value = level;
 };
@@ -79,14 +73,12 @@ onMounted(async () => {
   } catch (error) {
     console.error("Error initializing viewer:", error);
   } finally {
-    // Компонент загружен, viewer инициализирован
     isComponentLoading.value = false;
   }
 });
 
 onUnmounted(() => {
   viewer.core.disposeViewer();
-  // Освобождаем ресурсы стора и удаляем из реестра
   viewerManager.disposeViewer(props.viewerId);
 });
 </script>
@@ -113,7 +105,6 @@ onUnmounted(() => {
         </div>
 
         <div ref="containerRef" :class="$style.viewport">
-          <!-- Панель рабочих мест -->
           <EmployeeWorkplacePanel
             v-if="isModelLoaded"
             :workplace-cards="employeeWorkplace.filteredWorkplaceCards.value"
@@ -175,7 +166,7 @@ onUnmounted(() => {
   width: 100%;
   height: 50px;
   padding: 0 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   z-index: 100;
 }

@@ -2,14 +2,7 @@ import { ref, computed, shallowRef } from "vue";
 import * as OBC from "@thatopen/components";
 import { FragmentsModel } from "@thatopen/fragments";
 
-/**
- * Модуль для управления моделями и загрузкой IFC
- */
 export function createModelManagerModule() {
-  // ========================================
-  // STATE (приватные реактивные переменные)
-  // ========================================
-
   const _ifcLoader = shallowRef<OBC.IfcLoader | undefined>(undefined);
   const _model = shallowRef<FragmentsModel | undefined>(undefined);
   const _fragmentManager = shallowRef<OBC.FragmentsManager | undefined>(
@@ -20,12 +13,7 @@ export function createModelManagerModule() {
   const _isLoading = ref(false);
   const _loadingProgress = ref(0);
 
-  // ========================================
-  // COMPUTED API
-  // ========================================
-
   const api = computed(() => ({
-    // ===== STATE =====
     ifcLoader: _ifcLoader.value,
     model: _model.value,
     fragmentManager: _fragmentManager.value,
@@ -33,8 +21,6 @@ export function createModelManagerModule() {
     finder: _finder.value,
     isLoading: _isLoading.value,
     loadingProgress: _loadingProgress.value,
-
-    // ===== ACTIONS =====
     setIfcLoader: (loader: OBC.IfcLoader | undefined) => {
       _ifcLoader.value = loader;
     },

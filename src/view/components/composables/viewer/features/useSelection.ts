@@ -85,7 +85,6 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
     return outliner;
   }
 
-  // Функция для перемещения камеры к выбранному объекту
   const fitCameraToSelection = async (modelIdMap: OBC.ModelIdMap) => {
     if (!store.core.components || !store.core.currentWorld) return;
 
@@ -98,18 +97,15 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
     try {
       const boxer = store.core.components.get(OBC.BoundingBoxer);
 
-      // Получаем bounding box для выбранных элементов
       boxer.list.clear();
       await boxer.addFromModelIdMap(modelIdMap);
       const box = boxer.get();
       boxer.list.clear();
 
       if (box) {
-        // Вычисляем сферу из bounding box
         const sphere = new THREE.Sphere();
         box.getBoundingSphere(sphere);
 
-        // Перемещаем камеру к сфере
         if (world.camera.hasCameraControls()) {
           await world.camera.controls.fitToSphere(sphere, true);
         }
@@ -119,7 +115,6 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
     }
   };
 
-  // Теперь highlight использует outliner (для клика/выбора)
   const highlight: IEmployeeViewerSelectionHighlight = {
     clear: async () => {
       if (!store.features.selection.outliner) return;
@@ -133,22 +128,17 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
       const currentLocalId =
         store.features.selection.highlightedElement?.localId;
 
-      // Оптимизация: не перевыделяем тот же элемент
       if (currentLocalId === newLocalId) return;
 
-      // ВАЖНО: сначала очищаем визуальное выделение
       await store.features.selection.outliner!.clean();
 
-      // Затем устанавливаем новый выбранный элемент
       store.features.selection.setHighlightedElement({
         modelId: Object.keys(modelIdMap)[0],
         localId: newLocalId,
       });
 
-      // Добавляем визуальное выделение
       await store.features.selection.outliner!.addItems(modelIdMap);
 
-      // Перемещаем камеру к выбранному объекту
       await fitCameraToSelection(modelIdMap);
     },
   };
@@ -162,11 +152,9 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
       const result = (await raycaster.castRay()) as any;
 
       if (result && result.object) {
-        // Получаем modelId и localId из результата raycast
         const modelId = result.fragments.modelId;
         const localId = result.localId;
 
-        // Создаём modelIdMap
         const modelIdMap = {
           [modelId]: new Set([localId]),
         };

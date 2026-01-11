@@ -33,7 +33,6 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
 
   const markerObjects = ref<MarkerObject[]>([]);
 
-  // ✅ Устанавливаем callback сразу при создании composable
   viewerStore.features.employeeWorkplace.markers.setOnSelectCallback(
     (localId: number) => {
       console.log("🟢 useWorkplaceMarkers: callback triggered for", localId);
@@ -44,9 +43,6 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     }
   );
 
-  /**
-   * Инициализация менеджера маркеров
-   */
   const init = () => {
     if (!viewerStore.core.components) {
       console.error("Components not initialized");
@@ -54,7 +50,6 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     }
 
     try {
-      // Инициализируем простой маркер-менеджер (пустой объект для совместимости со store)
       const markerManager = {} as OBF.Marker;
       viewerStore.features.employeeWorkplace.markers.initialize(markerManager);
 
@@ -64,9 +59,6 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     }
   };
 
-  /**
-   * Получение 3D позиции центра элемента
-   */
   const getElementCenter = async (
     localId: number
   ): Promise<THREE.Vector3 | null> => {
@@ -82,7 +74,6 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
         [model.modelId]: new Set([localId]),
       };
 
-      // Используем FragmentsManager.getBBoxes для получения bounding box
       const fragmentsManager = components.get(OBC.FragmentsManager);
       const boundingBoxes = await fragmentsManager.getBBoxes(modelIdMap);
 
@@ -91,12 +82,10 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
         return null;
       }
 
-      // Берем первый bounding box
       const boundingBox = boundingBoxes[0];
       const center = new THREE.Vector3();
       boundingBox.getCenter(center);
 
-      // Смещаем маркер чуть выше центра элемента (на 0.5 метра)
       center.y += 0.5;
 
       return center;
@@ -106,14 +95,10 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     }
   };
 
-  /**
-   * Создание HTML-элемента маркера через Vue компонент
-   */
   const createMarkerElement = (card: WorkplaceCardData): MarkerState => {
     const container = document.createElement("div");
     container.style.pointerEvents = "auto";
 
-    // Обработчики событий с остановкой всплытия на контейнере
     container.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
     });
@@ -126,13 +111,11 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
       e.stopPropagation();
     });
 
-    // ✅ Создаем Vue приложение с передачей viewerId
     const app = createApp(WorkplaceMarker, {
       card,
       viewerId,
     });
 
-    // Монтируем компонент
     app.mount(container);
 
     return {
@@ -142,9 +125,6 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     };
   };
 
-  /**
-   * Создание маркеров для всех рабочих мест
-   */
   const createMarkersForWorkplaces = async (
     workplaceCards: WorkplaceCardData[]
   ): Promise<void> => {
@@ -158,7 +138,6 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
       return;
     }
 
-    // Очищаем все существующие маркеры
     clearAllMarkers();
 
     console.log(`Creating markers for ${workplaceCards.length} workplaces...`);
@@ -173,16 +152,13 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
         continue;
       }
 
-      // ✅ Теперь не передаем callback - компонент сам обратится к store
       const markerState = createMarkerElement(card);
 
       try {
-        // Создаем CSS2DObject для HTML-маркера
         const css2dObject = new CSS2DObject(markerState.htmlElement);
         css2dObject.position.copy(position);
         css2dObject.name = `workplace-marker-${card.localId}`;
 
-        // Добавляем маркер в сцену
         world.scene.three.add(css2dObject);
 
         const markerObject: MarkerObject = {
@@ -201,9 +177,6 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     }
   };
 
-  /**
-   * Очистка всех маркеров
-   */
   const clearAllMarkers = () => {
     console.log("🔴 clearAllMarkers CALLED");
     console.trace("Call stack:");
@@ -214,18 +187,16 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
       return;
     }
 
-    // Удаляем все маркеры из сцены
     markerObjects.value.forEach((markerObject) => {
       try {
         world.scene.three.remove(markerObject.css2dObject);
 
-        // Размонтируем Vue приложение
         const app = markerObject.app;
         if (app) {
           app.unmount();
         }
 
-        markerObject.htmlElement.remove(); // Удаляем DOM элемент
+        markerObject.htmlElement.remove();
       } catch (error) {
         console.warn(`Error removing marker:`, error);
       }
@@ -236,9 +207,6 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     console.log("All markers cleared");
   };
 
-  /**
-   * Управление видимостью конкретного маркера (не удаляет, а скрывает/показывает)
-   */
   const updateMarkerVisibility = (localId: number, visible: boolean) => {
     const markerObject = markerObjects.value.find(
       (markerObject) => markerObject.workplaceId === localId
@@ -249,13 +217,11 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     }
 
     try {
-      // Просто меняем видимость, не удаляем маркер
       markerObject.css2dObject.visible = visible;
       if (markerObject.htmlElement) {
         markerObject.htmlElement.style.display = visible ? "block" : "none";
       }
 
-      // ✅ Обновляем видимость в viewer store
       viewerStore.features.employeeWorkplace.markers.setVisibility(
         localId,
         visible
@@ -265,15 +231,11 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     }
   };
 
-  /**
-   * Очистка ресурсов
-   */
   const dispose = () => {
     clearAllMarkers();
     viewerStore.features.employeeWorkplace.markers.clear();
   };
 
-  // ✅ Отслеживание изменений выделенного элемента - используем viewer store
   watch(
     () => viewerStore.features.selection.highlightedElement,
     (highlightedElement) => {
@@ -282,10 +244,8 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
       console.log("🟣 Selection changed to:", selectedLocalId);
 
       if (selectedLocalId !== null) {
-        // Выделяем маркер через viewer store
         viewerStore.features.employeeWorkplace.markers.select(selectedLocalId);
       } else {
-        // Сбрасываем выделение через viewer store
         viewerStore.features.employeeWorkplace.markers.clearSelection();
       }
     }

@@ -2,37 +2,20 @@ import { ref, computed, shallowRef } from "vue";
 import * as OBF from "@thatopen/components-front";
 import type { WorkplaceCardData } from "@/view/components/viewport/WorkplaceCard.vue";
 
-/**
- * Модуль для управления рабочими местами сотрудников
- * Объединяет данные карточек рабочих мест и маркеры
- */
 export function createEmployeeWorkplaceModule() {
-  // ========================================
-  // STATE (приватные реактивные переменные)
-  // ========================================
-
-  // Workplace Cards Data
   const _workplaceCards = shallowRef<WorkplaceCardData[]>([]);
   const _workplaceCardsLoading = ref(false);
 
-  // Markers
   const _markerManager = shallowRef<OBF.Marker | undefined>(undefined);
   const _markersVisible = ref(true);
   const _selectedMarkers = ref<Map<number, boolean>>(new Map());
   const _markerVisibility = ref<Map<number, boolean>>(new Map());
   const _onSelectCallback = ref<((localId: number) => void) | null>(null);
 
-  // ========================================
-  // COMPUTED API
-  // ========================================
-
   const api = computed(() => ({
-    // ===== WORKPLACE CARDS STATE =====
     workplaceCards: {
       data: _workplaceCards.value,
       isLoading: _workplaceCardsLoading.value,
-
-      // Actions
       setData: (cards: WorkplaceCardData[]) => {
         _workplaceCards.value = cards;
       },
@@ -52,14 +35,11 @@ export function createEmployeeWorkplaceModule() {
       },
     },
 
-    // ===== MARKERS STATE =====
     markers: {
       markerManager: _markerManager.value,
       visible: _markersVisible.value,
       selectedMarkers: _selectedMarkers.value,
       markerVisibility: _markerVisibility.value,
-
-      // Getters
       isSelected: (localId: number): boolean => {
         return _selectedMarkers.value.get(localId) ?? false;
       },
@@ -76,7 +56,6 @@ export function createEmployeeWorkplaceModule() {
         return selected;
       },
 
-      // Actions
       setManager: (manager: OBF.Marker | undefined) => {
         _markerManager.value = manager;
       },
@@ -135,13 +114,10 @@ export function createEmployeeWorkplaceModule() {
       },
     },
 
-    // ===== ОБЩИЕ МЕТОДЫ =====
     clearAll: () => {
-      // Очищаем workplace cards
       _workplaceCards.value = [];
       _workplaceCardsLoading.value = false;
 
-      // Очищаем markers
       _markerManager.value = undefined;
       _markersVisible.value = true;
       _selectedMarkers.value.clear();

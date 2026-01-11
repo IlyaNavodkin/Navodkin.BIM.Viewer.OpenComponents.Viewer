@@ -91,7 +91,7 @@ const progress = computed(() => props.progress);
 
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, #3498db, #2ecc71);
+  background: #3498db;
   border-radius: 4px;
   transition: width 0.3s ease;
 }

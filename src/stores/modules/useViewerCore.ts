@@ -2,13 +2,7 @@ import { ref, computed, shallowRef } from "vue";
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
 
-/**
- * Модуль для управления ядром viewer'а (контейнер, компоненты, world)
- */
 export function createViewerCoreModule() {
-  // ========================================
-  // STATE (приватные реактивные переменные)
-  // ========================================
 
   const _container = ref<HTMLDivElement | undefined>(undefined);
   const _components = shallowRef<OBC.Components | undefined>(undefined);
@@ -23,19 +17,12 @@ export function createViewerCoreModule() {
   >(undefined);
   const _workerUrl = ref<string | undefined>(undefined);
 
-  // ========================================
-  // COMPUTED API
-  // ========================================
-
   const api = computed(() => ({
-    // ===== STATE =====
     container: _container.value,
     components: _components.value,
     worlds: _worlds.value,
     currentWorld: _currentWorld.value,
     workerUrl: _workerUrl.value,
-
-    // ===== ACTIONS =====
     setContainer: (container: HTMLDivElement | undefined) => {
       _container.value = container;
     },

@@ -2,11 +2,6 @@
   <div id="app">
     <div class="header">
       <h1>Multi-Instance Viewer Test - 2 Independent Viewers</h1>
-      <div class="controls">
-        <button @click="handleGreet">Greet</button>
-        <button @click="handleGetComponent">Get Component</button>
-        <p v-if="message">{{ message }}</p>
-      </div>
     </div>
     <div class="viewers-container">
       <div v-if="viewerId" class="viewer-wrapper">
@@ -19,70 +14,22 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
-import * as OBC from "@thatopen/components";
 import { v4 as uuidv4 } from "uuid";
-import { HelloWorldComponent } from "@/view-models/components";
 import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import EmployeeWorkplaceViewer from "@/view/components/viewport/EmployeeWorkplaceViewer.vue";
 
-// ID вьюверов будут сгенерированы в onMounted
 const viewerId = ref<string>("");
 
-const message = ref<string>("");
-let components: OBC.Components | null = null;
-let helloWorldComponent: HelloWorldComponent | null = null;
-
 onMounted(async () => {
-  // Генерируем уникальные ID для каждого вьювера
   viewerId.value = uuidv4();
-
-  components = new OBC.Components();
-
-  helloWorldComponent = new HelloWorldComponent(components);
-
-  helloWorldComponent.onBeforeUpdate.add(() => {
-    console.log("Component preparing to update");
-  });
-
-  helloWorldComponent.onAfterUpdate.add(() => {
-    console.log("Component updated");
-  });
-
-  message.value = "HelloWorld component created and registered!";
 });
 
 onUnmounted(() => {
-  // Dispose вьюверов
   const viewerManager = useViewerManagerStore();
   if (viewerId.value) {
     viewerManager.disposeViewer(viewerId.value);
   }
-
-  // Dispose компонентов
-  if (helloWorldComponent) {
-    helloWorldComponent.dispose();
-  }
-  if (components) {
-    components.dispose();
-  }
 });
-
-const handleGreet = () => {
-  if (helloWorldComponent) {
-    helloWorldComponent.greet("Developer");
-    message.value = "Check browser console!";
-  }
-};
-
-const handleGetComponent = async () => {
-  if (components) {
-    const hwComponent = await components.get(HelloWorldComponent);
-    if (hwComponent) {
-      hwComponent.greet("Retrieved via get()");
-      message.value = "Component retrieved via components.get()!";
-    }
-  }
-};
 </script>
 
 <style scoped>
@@ -161,7 +108,7 @@ p {
 
 .viewer-label {
   padding: 10px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   color: white;
   font-weight: 600;
   font-size: 12px;

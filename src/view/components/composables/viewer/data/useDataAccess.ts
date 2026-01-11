@@ -256,12 +256,10 @@ export const useDataAccess = (viewerId: string): IEmployeeViewerDataAccess => {
         const levelsNameWithoutPrefix = levelName?.replace(levelPrefix, "");
 
         if (workplaceNumber) {
-          // Находим соответствующий уровень по имени
           const levelData = levelsNameWithoutPrefix
             ? levels.find((l) => l.name === levelsNameWithoutPrefix) ?? null
             : null;
 
-          // Получаем данные сотрудника
           const employee =
             employeeStore.getEmployeeByWorkplaceNumber(workplaceNumber);
 

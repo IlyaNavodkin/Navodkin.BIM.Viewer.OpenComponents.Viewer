@@ -10,11 +10,9 @@ export interface WorkplaceMarkerProps {
 
 const props = defineProps<WorkplaceMarkerProps>();
 
-// ✅ Получаем viewer store для конкретного viewer'а
 const viewerManager = useViewerManagerStore();
 const viewerStore = viewerManager.getViewer(props.viewerId);
 
-// ✅ Computed на основе viewer store getter
 const isSelected = computed(() => {
   return viewerStore.features.employeeWorkplace.markers.isSelected(
     props.card.localId
@@ -25,7 +23,6 @@ const handleClick = (event: MouseEvent) => {
   event.stopPropagation();
   console.log("🟢 Marker clicked:", props.card.localId);
 
-  // ✅ Вызываем метод viewer store для обработки клика
   viewerStore.features.employeeWorkplace.markers.handleClick(
     props.card.localId
   );
@@ -45,7 +42,6 @@ const getAvatarPlaceholder = (name: string | null) => {
 </script>
 
 <template>
-  <!-- template остается тем же -->
   <div
     :class="[
       $style.marker,
@@ -82,7 +78,6 @@ const getAvatarPlaceholder = (name: string | null) => {
   </div>
 </template>
 
-<!-- стили остаются теми же -->
 <style module lang="scss">
 .marker {
   position: relative;
@@ -106,21 +101,18 @@ const getAvatarPlaceholder = (name: string | null) => {
     transform: scale(0.95);
   }
 
-  // Занятое место - зеленый
   &.markerOccupied {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    background: #10b981;
     border: 3px solid #34d399;
   }
 
-  // Свободное место - оранжевый
   &.markerVacant {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    background: #f59e0b;
     border: 3px solid #fbbf24;
   }
 
-  // Выбранный маркер - фиолетовый с подсветкой
   &.markerSelected {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #667eea;
     border: 3px solid #a78bfa;
     box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.3),
       0 8px 24px rgba(102, 126, 234, 0.4);
@@ -170,7 +162,7 @@ const getAvatarPlaceholder = (name: string | null) => {
   top: -45px;
   left: 50%;
   transform: translateX(-50%);
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   color: white;
   padding: 6px 10px;
   border-radius: 8px;
@@ -205,7 +197,7 @@ const getAvatarPlaceholder = (name: string | null) => {
   height: 24px;
   border-radius: 50%;
   border: 2px solid white;
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: #ef4444;
   color: white;
   font-size: 12px;
   font-weight: bold;
@@ -219,7 +211,7 @@ const getAvatarPlaceholder = (name: string | null) => {
 
   &:hover {
     transform: scale(1.15);
-    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    background: #dc2626;
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
   }
 
@@ -228,7 +220,6 @@ const getAvatarPlaceholder = (name: string | null) => {
   }
 }
 
-// Пульсация для свободных мест
 .pulse {
   position: absolute;
   top: 50%;

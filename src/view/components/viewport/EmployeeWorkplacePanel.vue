@@ -66,7 +66,6 @@ const handleCardClick = (localId: number) => {
     @contextmenu.stop
     @wheel.stop
   >
-    <!-- Минимизированная панель -->
     <div
       v-if="isCollapsed"
       :class="$style.collapsedPanel"
@@ -84,9 +83,7 @@ const handleCardClick = (localId: number) => {
       </svg>
     </div>
 
-    <!-- Развернутая панель -->
     <template v-else>
-      <!-- Заголовок с кнопкой сворачивания -->
       <div :class="$style.header" @click="toggleCollapse">
         <span :class="$style.headerTitle">Рабочие места</span>
         <button :class="$style.collapseButton" type="button">
@@ -94,11 +91,8 @@ const handleCardClick = (localId: number) => {
         </button>
       </div>
 
-      <!-- Контент панели -->
       <div :class="$style.content">
-        <!-- Фильтры -->
         <div :class="$style.filters">
-          <!-- Селектор уровня -->
           <div :class="$style.filterGroup">
             <label :class="$style.filterLabel" for="level-select"
               >Уровень</label
@@ -120,7 +114,6 @@ const handleCardClick = (localId: number) => {
             </select>
           </div>
 
-          <!-- Фильтр по занятости -->
           <div :class="$style.filterGroup">
             <label :class="$style.filterLabel" for="occupancy-select"
               >Статус</label
@@ -137,7 +130,6 @@ const handleCardClick = (localId: number) => {
             </select>
           </div>
 
-          <!-- Поиск -->
           <div :class="$style.filterGroup">
             <label :class="$style.filterLabel" for="search-input">Поиск</label>
             <input
@@ -151,7 +143,6 @@ const handleCardClick = (localId: number) => {
           </div>
         </div>
 
-        <!-- Список карточек -->
         <div :class="$style.cardsList">
           <div v-if="props.isLoading" :class="$style.loadingMessage">
             Загрузка...
@@ -208,13 +199,13 @@ const handleCardClick = (localId: number) => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   cursor: pointer;
   user-select: none;
   transition: background 0.2s ease;
 
   &:hover {
-    background: linear-gradient(135deg, #5568d3 0%, #653a8b 100%);
+    background: #5568d3;
   }
 }
 
@@ -248,7 +239,7 @@ const handleCardClick = (localId: number) => {
 .collapsedPanel {
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   border-radius: 10px;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
   cursor: pointer;
@@ -258,7 +249,7 @@ const handleCardClick = (localId: number) => {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:hover {
-    background: linear-gradient(135deg, #5568d3 0%, #653a8b 100%);
+    background: #5568d3;
     box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
     transform: translateX(-3px) scale(1.05);
   }

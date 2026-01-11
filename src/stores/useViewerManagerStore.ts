@@ -2,51 +2,19 @@ import { ref, computed } from "vue";
 import { defineStore } from "pinia";
 import { createViewerStore, type ViewerStore } from "./useViewerCoreStore";
 
-/**
- * Стор для централизованного управления всеми экземплярами вьюверов
- * Инкапсулирует создание, получение и удаление сторов вьюверов
- */
 export const useViewerManagerStore = defineStore("viewerManager", () => {
-  // ========================================
-  // STATE
-  // ========================================
-
-  // Реестр всех активных сторов вьюверов
-  // Используем any для внутреннего хранения, чтобы избежать конфликтов с внутренними типами Pinia
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const _viewerStores = ref(new Map<string, any>());
 
-  // ========================================
-  // COMPUTED
-  // ========================================
-
-  /**
-   * Количество активных вьюверов
-   */
   const activeViewersCount = computed(() => _viewerStores.value.size);
 
-  /**
-   * Список ID всех активных вьюверов
-   */
   const activeViewerIds = computed(() =>
     Array.from(_viewerStores.value.keys())
   );
 
-  /**
-   * Проверяет существует ли вьювер с указанным ID
-   */
   const hasViewer = computed(() => {
     return (viewerId: string) => _viewerStores.value.has(viewerId);
   });
 
-  // ========================================
-  // ACTIONS
-  // ========================================
-
-  /**
-   * Создает новый стор для вьювера
-   * Если стор уже существует - возвращает существующий
-   */
   function createViewer(viewerId: string): ViewerStore {
     let store = _viewerStores.value.get(viewerId);
 
@@ -62,10 +30,6 @@ export const useViewerManagerStore = defineStore("viewerManager", () => {
     return store as ViewerStore;
   }
 
-  /**
-   * Получает существующий стор вьювера
-   * Бросает ошибку если стор не найден
-   */
   function getViewer(viewerId: string): ViewerStore {
     const store = _viewerStores.value.get(viewerId);
 
@@ -78,9 +42,6 @@ export const useViewerManagerStore = defineStore("viewerManager", () => {
     return store as ViewerStore;
   }
 
-  /**
-   * Удаляет стор вьювера и освобождает ресурсы
-   */
   function disposeViewer(viewerId: string): void {
     const store = _viewerStores.value.get(viewerId);
 
@@ -95,9 +56,6 @@ export const useViewerManagerStore = defineStore("viewerManager", () => {
     }
   }
 
-  /**
-   * Удаляет все вьюверы и освобождает все ресурсы
-   */
   function disposeAllViewers(): void {
     console.log(
       `[ViewerManager] Disposing all viewers (${_viewerStores.value.size})`
@@ -111,9 +69,6 @@ export const useViewerManagerStore = defineStore("viewerManager", () => {
     _viewerStores.value.clear();
   }
 
-  /**
-   * Получает информацию о всех активных вьюверах (для отладки)
-   */
   function getViewersInfo() {
     const viewers: Array<{
       viewerId: string;
@@ -132,17 +87,10 @@ export const useViewerManagerStore = defineStore("viewerManager", () => {
     return viewers;
   }
 
-  // ========================================
-  // RETURN
-  // ========================================
-
   return {
-    // Computed
     activeViewersCount,
     activeViewerIds,
     hasViewer,
-
-    // Actions
     createViewer,
     getViewer,
     disposeViewer,
