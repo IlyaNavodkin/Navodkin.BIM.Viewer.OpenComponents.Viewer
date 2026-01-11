@@ -77,6 +77,7 @@ export const useViewer = (viewerId: string): IEmployeeViewerFacade => {
     await core.init(containerElement);
     await modelManager.init();
     selection.init();
+    employeeWorkplace.initMarkers();
   };
 
   const disposeViewer = async () => {
@@ -102,6 +103,7 @@ export const useViewer = (viewerId: string): IEmployeeViewerFacade => {
     await levels.loadLevels(model.modelId);
     await employeeWorkplace.loadEmployeeWorkplaces(model.modelId);
     await employeeWorkplace.selectWorkplaceFromRoute();
+    await employeeWorkplace.updateMarkers();
 
     return model;
   };

@@ -1,6 +1,8 @@
 import { ItemAttribute, ItemData } from "@thatopen/fragments";
 import * as FRAGS from "@thatopen/fragments";
 import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
+import { useEmployeeStore } from "@/stores/useEmployeeStore";
+import type { WorkplaceCardData } from "@/view/components/viewport/WorkplaceCard.vue";
 
 export type PropertySet = {
   name: string;
@@ -32,13 +34,6 @@ export type LevelsViewData = {
   localId: number;
 };
 
-export type EmployeeWorkplaceViewData = {
-  localId: number;
-  category: string;
-  workplaceNumber: string;
-  level: LevelsViewData | null;
-};
-
 export type EntityData = {
   category: string;
   localId: number;
@@ -64,16 +59,17 @@ export interface IEmployeeViewerDataAccess {
   ) => Promise<EntityData | null>;
   getSpatialStructure: (modelId: string) => Promise<FRAGS.SpatialTreeItem>;
   getLevels: (modelId: string) => Promise<LevelsViewData[]>;
-  getEmployeeWorkplaces: (
+  getWorkplaceCards: (
     modelId: string,
     levels: LevelsViewData[]
-  ) => Promise<EmployeeWorkplaceViewData[]>;
+  ) => Promise<WorkplaceCardData[]>;
   getElementInfo: (modelId: string, localId: number) => Promise<any>;
 }
 
 const constrantGroupName = "Constraints";
 const identityGroupName = "Identity Data";
 const levelPrefix = "Level: ";
+const workplaceIfcCategoryRegexPattern = /IFCFURNISHINGELEMENT/;
 
 export const useDataAccess = (viewerId: string): IEmployeeViewerDataAccess => {
   const viewerManager = useViewerManagerStore();
@@ -223,60 +219,65 @@ export const useDataAccess = (viewerId: string): IEmployeeViewerDataAccess => {
     return levelsViewData;
   };
 
-  const getEmployeeWorkplaces = async (
+  const getWorkplaceCards = async (
     modelId: string,
     levels: LevelsViewData[]
-  ) => {
+  ): Promise<WorkplaceCardData[]> => {
     const modelFromId = store.modelManager.fragmentManager?.list.get(modelId);
     if (!modelFromId) {
       throw new Error(`Model not found for modelId: ${modelId}`);
     }
-    let workplacesViewData: EmployeeWorkplaceViewData[] = [];
 
-    if (modelFromId) {
-      const workplaceItems = await modelFromId.getItemsOfCategories([
-        /IFCFURNISHINGELEMENT/,
-      ]);
-      const workplaceIds = Object.values(workplaceItems).flat();
+    const employeeStore = useEmployeeStore();
+    const workplaceCards: WorkplaceCardData[] = [];
 
-      console.log("Found employee workplaces (localId):", workplaceIds);
+    const workplaceItems = await modelFromId.getItemsOfCategories([
+      workplaceIfcCategoryRegexPattern,
+    ]);
+    const workplaceIds = Object.values(workplaceItems).flat();
 
-      if (workplaceIds.length > 0) {
-        const workplaceData = await modelFromId.getItemsData(workplaceIds, {
-          attributesDefault: true,
-        });
-        console.log("Employee workplace data:", workplaceData);
+    console.log("Found employee workplaces (localId):", workplaceIds);
 
-        for (const item of workplaceData) {
-          console.log("Item:", item);
-          const properties = await getPropertySet(
-            (item._localId as ItemAttribute)?.value as number,
-            modelId
-          );
-          console.log("Properties:", properties);
-          const workplaceNumber = properties[identityGroupName]?.Comments;
-          const levelName = properties[constrantGroupName]?.Level;
-          const levelsNameWithoutPrefix = levelName?.replace(levelPrefix, "");
+    if (workplaceIds.length > 0) {
+      const workplaceData = await modelFromId.getItemsData(workplaceIds, {
+        attributesDefault: true,
+      });
+      console.log("Employee workplace data:", workplaceData);
 
-          if (workplaceNumber) {
-            // Находим соответствующий уровень по имени
-            const levelData = levelsNameWithoutPrefix
-              ? levels.find((l) => l.name === levelsNameWithoutPrefix) ?? null
-              : null;
+      for (const item of workplaceData) {
+        console.log("Item:", item);
+        const properties = await getPropertySet(
+          (item._localId as ItemAttribute)?.value as number,
+          modelId
+        );
+        console.log("Properties:", properties);
+        const workplaceNumber = properties[identityGroupName]?.Comments;
+        const levelName = properties[constrantGroupName]?.Level;
+        const levelsNameWithoutPrefix = levelName?.replace(levelPrefix, "");
 
-            workplacesViewData.push({
-              localId: (item._localId as ItemAttribute)?.value as number,
-              category:
-                (item._category as ItemAttribute)?.value?.toString() ?? "",
-              workplaceNumber: workplaceNumber,
-              level: levelData,
-            });
-          }
+        if (workplaceNumber) {
+          // Находим соответствующий уровень по имени
+          const levelData = levelsNameWithoutPrefix
+            ? levels.find((l) => l.name === levelsNameWithoutPrefix) ?? null
+            : null;
+
+          // Получаем данные сотрудника
+          const employee =
+            employeeStore.getEmployeeByWorkplaceNumber(workplaceNumber);
+
+          workplaceCards.push({
+            localId: (item._localId as ItemAttribute)?.value as number,
+            workplaceNumber: workplaceNumber,
+            level: levelData,
+            employeeName: employee?.name ?? null,
+            employeeAvatarUrl: employee?.avatarUrl ?? null,
+            isOccupied: !!employee,
+          });
         }
       }
     }
 
-    return workplacesViewData;
+    return workplaceCards;
   };
 
   const getElementInfo = async (
@@ -316,7 +317,7 @@ export const useDataAccess = (viewerId: string): IEmployeeViewerDataAccess => {
     getSpatialStructure,
 
     getLevels,
-    getEmployeeWorkplaces,
+    getWorkplaceCards,
     getElementInfo,
   };
 };

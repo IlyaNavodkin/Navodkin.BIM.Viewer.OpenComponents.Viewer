@@ -1,12 +1,13 @@
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
-import { PostproductionAspect } from "@thatopen/components-front";
 import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 
 export interface IEmployeeViewerCore {
   init: (containerElement: HTMLDivElement) => Promise<void>;
   dispose: () => void;
 }
+
+const worldName = "employee-viewer-world";
 
 export const useViewerCore = (viewerId: string): IEmployeeViewerCore => {
   const viewerManager = useViewerManagerStore();
@@ -38,13 +39,13 @@ export const useViewerCore = (viewerId: string): IEmployeeViewerCore => {
 
     world.scene.setup();
 
+    world.name = worldName;
     world.scene.three.background = null;
     world.renderer.postproduction.enabled = true;
     world.dynamicAnchor = false;
 
     components.init();
 
-    // Используем локальный worker.mjs из public директории
     const localWorkerPath = "/that-open/resources/worker.mjs";
     const fetchedUrl = await fetch(localWorkerPath);
     const workerBlob = await fetchedUrl.blob();
@@ -53,17 +54,13 @@ export const useViewerCore = (viewerId: string): IEmployeeViewerCore => {
     });
 
     const workerUrl = URL.createObjectURL(workerFile);
-    store.initializeCore(
+    store.core.initialize(
       containerElement,
       components,
       worlds,
       world,
       workerUrl
     );
-
-    console.log(store.core.workerUrl);
-
-    console.log("Auto selection configured");
   };
 
   const dispose = () => {
@@ -94,7 +91,7 @@ export const useViewerCore = (viewerId: string): IEmployeeViewerCore => {
         }
       }
 
-      store.clearCore();
+      store.core.clear();
     } catch (error) {
       console.error("Error disposing viewer core resources:", error);
     }

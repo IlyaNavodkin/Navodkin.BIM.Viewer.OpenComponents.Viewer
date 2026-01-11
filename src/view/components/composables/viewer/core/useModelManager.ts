@@ -53,7 +53,7 @@ export const useModelManager = (
     const hider = store.core.components.get(OBC.Hider);
     const finder = store.core.components.get(OBC.ItemsFinder);
 
-    store.initializeModelManager(ifcLoader, fragmentManager, hider, finder);
+    store.modelManager.initialize(ifcLoader, fragmentManager, hider, finder);
 
     store.core.currentWorld!.camera.controls.addEventListener("rest", () => {
       const fragmentMgr = store.modelManager.fragmentManager;
@@ -79,7 +79,7 @@ export const useModelManager = (
   };
 
   const handleProgress = (progress: any) => {
-    store.setLoadingProgress(Math.min(100, Math.max(0, progress)));
+    store.modelManager.setLoadingProgress(Math.min(100, Math.max(0, progress)));
   };
 
   const loadModelByPath = async (
@@ -91,8 +91,8 @@ export const useModelManager = (
     }
 
     try {
-      store.setIsLoading(true);
-      store.setLoadingProgress(0);
+      store.modelManager.setIsLoading(true);
+      store.modelManager.setLoadingProgress(0);
 
       const getFileResponse = await fetch(path);
       const data = await getFileResponse.arrayBuffer();
@@ -112,8 +112,8 @@ export const useModelManager = (
       );
 
       model.setLodMode(LodMode.ALL_VISIBLE);
-      store.setModel(model);
-      store.setLoadingProgress(100);
+      store.modelManager.setModel(model);
+      store.modelManager.setLoadingProgress(100);
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -122,9 +122,9 @@ export const useModelManager = (
       console.error("Error loading model:", error);
       throw error;
     } finally {
-      store.setIsLoading(false);
+      store.modelManager.setIsLoading(false);
       setTimeout(() => {
-        store.setLoadingProgress(0);
+        store.modelManager.setLoadingProgress(0);
       }, 300);
     }
   };
@@ -140,7 +140,7 @@ export const useModelManager = (
   const unload = () => {
     if (store.modelManager.model) {
       store.modelManager.model.dispose();
-      store.setModel(undefined);
+      store.modelManager.setModel(undefined);
     }
   };
 
@@ -164,7 +164,7 @@ export const useModelManager = (
         }
       }
 
-      store.clearModelManager();
+      store.modelManager.clear();
     } catch (error) {
       console.error("Error disposing model manager resources:", error);
     }

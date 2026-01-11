@@ -13,26 +13,24 @@ export const useLevels = (viewerId: string): ILevels => {
 
   const loadLevels = async (modelId: string) => {
     try {
-      store.setLevelsLoading(true);
-      store.setLevels([]);
+      store.features.level.setLoading(true);
+      store.features.level.setData([]);
 
       const levels = await getLevels(modelId);
       const sortedLevels = levels.sort((a, b) => a.elevation - b.elevation);
-      store.setLevels(sortedLevels);
+      store.features.level.setData(sortedLevels);
 
-      console.log(
-        `Loaded levels: ${store.features.elementsData.levels.data.length}`
-      );
+      console.log(`Loaded levels: ${store.features.level.data.length}`);
     } catch (error) {
       console.error("Error loading levels:", error);
-      store.setLevels([]);
+      store.features.level.setData([]);
     } finally {
-      store.setLevelsLoading(false);
+      store.features.level.setLoading(false);
     }
   };
 
   const clear = () => {
-    store.clearLevels();
+    store.features.level.clear();
   };
 
   return {

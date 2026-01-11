@@ -40,10 +40,9 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
     );
 
     if (outliner) {
-      store.initializeSelection(outliner);
+      store.features.selection.initialize(outliner);
     }
 
-    // Инициализация raycaster для двойного клика
     setupRaycaster(world);
   };
 
@@ -61,7 +60,6 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
     const casters = store.core.components.get(OBC.Raycasters);
     raycaster = casters.get(world);
 
-    // Добавляем обработчик двойного клика для выбора элементов
     store.core.container.addEventListener("dblclick", handleDoubleClick);
   };
 
@@ -126,7 +124,7 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
     clear: async () => {
       if (!store.features.selection.outliner) return;
       await store.features.selection.outliner!.clean();
-      store.setCurrentSelectedElement(undefined);
+      store.features.selection.setHighlightedElement(undefined);
     },
     set: async (modelIdMap: OBC.ModelIdMap) => {
       if (!store.features.selection.outliner) return;
@@ -142,7 +140,7 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
       await store.features.selection.outliner!.clean();
 
       // Затем устанавливаем новый выбранный элемент
-      store.setCurrentSelectedElement({
+      store.features.selection.setHighlightedElement({
         modelId: Object.keys(modelIdMap)[0],
         localId: newLocalId,
       });
@@ -185,8 +183,8 @@ export const useSelection = (viewerId: string): IEmployeeViewerSelection => {
         console.log("Entity:", entity);
 
         if (
-          !store.features.elementsData.employeeWorkplaces.data.some(
-            (workplace) => workplace.localId === localId
+          !store.features.employeeWorkplace.workplaceCards.data.some(
+            (card) => card.localId === localId
           )
         ) {
           await highlight.clear();

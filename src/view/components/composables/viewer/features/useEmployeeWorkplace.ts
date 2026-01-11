@@ -1,8 +1,17 @@
-import { ref, computed, watch, type Ref, type ComputedRef } from "vue";
+import {
+  ref,
+  computed,
+  watch,
+  onMounted,
+  onUnmounted,
+  type Ref,
+  type ComputedRef,
+} from "vue";
 import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import { useEmployeeStore } from "@/stores/useEmployeeStore";
 import { useSelection } from "./useSelection";
 import { useDataAccess, type LevelsViewData } from "../data/useDataAccess";
+import { useWorkplaceMarkers } from "./useWorkplaceMarkers";
 import * as OBC from "@thatopen/components";
 import type { WorkplaceCardData } from "@/view/components/viewport/WorkplaceCard.vue";
 import { useRoute } from "vue-router";
@@ -20,7 +29,11 @@ export interface IEmployeeWorkplace {
   selectWorkplaceFromRoute: () => Promise<void>;
   loadEmployeeWorkplaces: (modelId: string) => Promise<void>;
   clearWorkplaces: () => void;
+  initMarkers: () => void;
+  updateMarkers: () => Promise<void>;
 }
+
+const globalEventName = "workplace-marker-select";
 
 export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
   const route = useRoute();
@@ -28,7 +41,8 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
   const viewerStore = viewerManager.getViewer(viewerId);
   const employeeStore = useEmployeeStore();
   const selection = useSelection(viewerId);
-  const { getEmployeeWorkplaces } = useDataAccess(viewerId);
+  const { getWorkplaceCards } = useDataAccess(viewerId);
+  const markers = useWorkplaceMarkers(viewerId);
 
   const selectedLevel = ref<string>("all");
   const searchQuery = ref<string>("");
@@ -39,25 +53,9 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
     return viewerStore.features.selection.highlightedElement?.localId ?? null;
   });
 
-  // Агрегированные данные: объединяем рабочие места и сотрудников
+  // ✅ Получаем готовые карточки напрямую из store
   const workplaceCards = computed<WorkplaceCardData[]>(() => {
-    const workplaces =
-      viewerStore.features.elementsData.employeeWorkplaces.data;
-
-    return workplaces.map((workplace) => {
-      const employee = employeeStore.getEmployeeByWorkplaceNumber(
-        workplace.workplaceNumber
-      );
-
-      return {
-        localId: workplace.localId,
-        workplaceNumber: workplace.workplaceNumber,
-        level: workplace.level,
-        employeeName: employee?.name ?? null,
-        employeeAvatarUrl: employee?.avatarUrl ?? null,
-        isOccupied: !!employee,
-      };
-    });
+    return viewerStore.features.employeeWorkplace.workplaceCards.data;
   });
 
   // Список доступных уровней (отсортированных по высоте от нижнего к верхнему)
@@ -131,11 +129,10 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
   const selectWorkplaceById = async (localId: number) => {
     if (!viewerStore.modelManager.model) return;
 
-    // Проверяем, что элемент является рабочим местом
-    const isWorkplace =
-      viewerStore.features.elementsData.employeeWorkplaces.data.some(
-        (workplace) => workplace.localId === localId
-      );
+    // ✅ Проверяем, что элемент является рабочим местом
+    const isWorkplace = workplaceCards.value.some(
+      (card) => card.localId === localId
+    );
 
     if (!isWorkplace) {
       await selection.highlight.clear();
@@ -204,33 +201,83 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
   // Сброс выделения при изменении любого фильтра
   watch([selectedLevel, occupancyFilter, searchQuery], async () => {
     await selection.highlight.clear();
+    // Обновляем видимость маркеров на основе фильтров (не пересоздаем!)
+    updateMarkersVisibility();
   });
 
-  // Загрузка рабочих мест из модели
+  // Подписка на события выбора из маркера
+  onMounted(() => {
+    window.addEventListener(globalEventName, handleMarkerSelect);
+  });
+
+  onUnmounted(() => {
+    window.removeEventListener(globalEventName, handleMarkerSelect);
+    markers.dispose();
+  });
+
+  // ✅ Загрузка карточек рабочих мест (с данными сотрудников)
   const loadEmployeeWorkplaces = async (modelId: string) => {
     try {
-      viewerStore.setEmployeeWorkplacesLoading(true);
-      viewerStore.setEmployeeWorkplaces([]);
+      viewerStore.features.employeeWorkplace.workplaceCards.setLoading(true);
+      viewerStore.features.employeeWorkplace.workplaceCards.setData([]);
 
       // Получаем уровни из store для сопоставления
-      const levels = viewerStore.features.elementsData.levels.data;
-      const workplaces = await getEmployeeWorkplaces(modelId, levels);
-      viewerStore.setEmployeeWorkplaces(workplaces);
+      const levels = viewerStore.features.level.data;
+      const cards = await getWorkplaceCards(modelId, levels);
+      viewerStore.features.employeeWorkplace.workplaceCards.setData(cards);
 
-      console.log(
-        `Loaded employee workplaces: ${viewerStore.features.elementsData.employeeWorkplaces.data.length}`
-      );
+      console.log(`Loaded workplace cards: ${cards.length}`);
     } catch (error) {
-      console.error("Error loading employee workplaces:", error);
-      viewerStore.setEmployeeWorkplaces([]);
+      console.error("Error loading workplace cards:", error);
+      viewerStore.features.employeeWorkplace.workplaceCards.setData([]);
     } finally {
-      viewerStore.setEmployeeWorkplacesLoading(false);
+      viewerStore.features.employeeWorkplace.workplaceCards.setLoading(false);
     }
   };
 
   // Очистка данных рабочих мест
   const clearWorkplaces = () => {
-    viewerStore.clearEmployeeWorkplaces();
+    markers.clearAllMarkers();
+    viewerStore.features.employeeWorkplace.workplaceCards.clear();
+  };
+
+  // Инициализация маркеров
+  const initMarkers = () => {
+    markers.init();
+  };
+
+  // Создание маркеров на основе всех рабочих мест (вызывается один раз после загрузки)
+  const updateMarkers = async () => {
+    // Создаем маркеры для ВСЕХ рабочих мест
+
+    console.log("🔵 [useEmployeeWorkplace] updateMarkers CALLED");
+    console.log("workplaceCards.value", workplaceCards.value);
+    await markers.createMarkersForWorkplaces(workplaceCards.value);
+  };
+
+  // Обновление видимости маркеров на основе фильтров (не пересоздает маркеры)
+  const updateMarkersVisibility = () => {
+    console.log("🟡 [useEmployeeWorkplace] updateMarkersVisibility CALLED");
+    console.trace("Call stack:");
+
+    // Получаем localId отфильтрованных рабочих мест
+    const visibleLocalIds = new Set(
+      filteredWorkplaceCards.value.map((card) => card.localId)
+    );
+
+    // Показываем/скрываем маркеры в зависимости от фильтров
+    workplaceCards.value.forEach((card) => {
+      const shouldBeVisible = visibleLocalIds.has(card.localId);
+      markers.updateMarkerVisibility(card.localId, shouldBeVisible);
+    });
+  };
+
+  // Обработчик события выбора из маркера
+  const handleMarkerSelect = (event: Event) => {
+    const customEvent = event as CustomEvent<{ localId: number }>;
+    if (customEvent.detail?.localId) {
+      selectWorkplaceById(customEvent.detail.localId);
+    }
   };
 
   return {
@@ -246,5 +293,7 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
     selectWorkplaceFromRoute,
     loadEmployeeWorkplaces,
     clearWorkplaces,
+    initMarkers,
+    updateMarkers,
   };
 };
