@@ -23,6 +23,10 @@ const isModelLoaded = computed(() => {
   return viewer.modelManager.isModelLoaded.value;
 });
 
+const isMarkersLoading = computed(() => {
+  return viewer.employeeWorkplace.isMarkersLoading.value;
+});
+
 const isModelLoading = computed(() => {
   return viewer.modelManager.isLoading.value;
 });
@@ -84,6 +88,10 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <p>
+    isMarkersLoading:
+    <strong>{{ isMarkersLoading ? "true" : "false" }}</strong>
+  </p>
   <div :class="$style.root" tabindex="0">
     <LoadingScreen
       v-if="isLoading"

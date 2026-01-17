@@ -24,6 +24,7 @@ export interface IEmployeeWorkplace {
   occupancyFilter: Ref<string>;
   availableLevels: ComputedRef<LevelsViewData[]>;
   selectedLocalId: ComputedRef<number | null>;
+  isMarkersLoading: ComputedRef<boolean>;
 
   selectWorkplaceById: (localId: number) => Promise<void>;
   selectWorkplaceFromRoute: () => Promise<void>;
@@ -47,6 +48,10 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
   const selectedLevel = ref<string>("all");
   const searchQuery = ref<string>("");
   const occupancyFilter = ref<string>("all");
+
+  const isMarkersLoading = computed(() => {
+    return markers.isLoading.value;
+  });
 
   const selectedLocalId = computed<number | null>(() => {
     return viewerStore.features.selection.highlightedElement?.localId ?? null;
@@ -258,6 +263,7 @@ export const useEmployeeWorkplace = (viewerId: string): IEmployeeWorkplace => {
     occupancyFilter,
     availableLevels,
     selectedLocalId,
+    isMarkersLoading,
 
     selectWorkplaceById,
     selectWorkplaceFromRoute,

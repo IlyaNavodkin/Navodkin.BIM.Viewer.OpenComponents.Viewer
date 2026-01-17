@@ -1,4 +1,4 @@
-import { watch, createApp, ref } from "vue";
+import { watch, createApp, ref, Ref } from "vue";
 import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
@@ -15,6 +15,8 @@ export interface IWorkplaceMarkers {
   clearAllMarkers: () => void;
   updateMarkerVisibility: (localId: number, visible: boolean) => void;
   dispose: () => void;
+
+  isLoading: Ref<boolean>;
 }
 
 export type MarkerState = {
@@ -30,6 +32,7 @@ export type MarkerObject = MarkerState & {
 export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
   const viewerManager = useViewerManagerStore();
   const viewerStore = viewerManager.getViewer(viewerId);
+  const isLoading = ref(false);
 
   const markerObjects = ref<MarkerObject[]>([]);
 
@@ -133,6 +136,7 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
 
     const world = viewerStore.core.currentWorld;
 
+    isLoading.value = true;
     if (!world) {
       console.error("World not initialized");
       return;
@@ -175,6 +179,8 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
         );
       }
     }
+
+    isLoading.value = false;
   };
 
   const clearAllMarkers = () => {
@@ -256,5 +262,7 @@ export const useWorkplaceMarkers = (viewerId: string): IWorkplaceMarkers => {
     clearAllMarkers,
     updateMarkerVisibility,
     dispose,
+
+    isLoading,
   };
 };

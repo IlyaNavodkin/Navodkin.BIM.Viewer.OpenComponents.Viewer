@@ -34,11 +34,16 @@ export interface IFacadeSelection {
   setSelectionHighlight: (modelIdMap: OBC.ModelIdMap) => Promise<void>;
 }
 
+export interface IWorkplaceModule {
+  isMarkersLoading: ComputedRef<boolean>;
+}
+
 export interface IEmployeeViewerFacade {
   core: IFacadeCore;
   modelManager: IFacadeModelManager;
   modelDataAccess: IFacadeModelData;
   selection: IFacadeSelection;
+  employeeWorkplace: IWorkplaceModule;
 }
 
 export const useViewer = (viewerId: string): IEmployeeViewerFacade => {
@@ -134,6 +139,9 @@ export const useViewer = (viewerId: string): IEmployeeViewerFacade => {
 
       loadIfc,
       handleFileChange,
+    },
+    employeeWorkplace: {
+      isMarkersLoading: employeeWorkplace.isMarkersLoading,
     },
     modelDataAccess: {
       getElementInfo: dataAccess.getElementInfo,

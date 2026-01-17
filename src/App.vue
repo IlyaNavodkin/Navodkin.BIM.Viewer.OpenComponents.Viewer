@@ -3,6 +3,7 @@
     <div class="header">
       <h1>Multi-Instance Viewer Test - 2 Independent Viewers</h1>
     </div>
+    <div class="debug-info"></div>
     <div class="viewers-container">
       <div v-if="viewerId" class="viewer-wrapper">
         <div class="viewer-label">Viewer 1: {{ viewerId }}</div>
@@ -13,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
 import { v4 as uuidv4 } from "uuid";
 import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
 import EmployeeWorkplaceViewer from "@/view/components/viewport/EmployeeWorkplaceViewer.vue";
