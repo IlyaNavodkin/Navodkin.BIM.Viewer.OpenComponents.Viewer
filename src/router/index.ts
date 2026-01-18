@@ -1,23 +1,21 @@
-import { createRouter, createWebHistory } from "vue-router";
-import type { RouteRecordRaw } from "vue-router";
-
-const routes: RouteRecordRaw[] = [
-  {
-    path: "/",
-    name: "home",
-    component: () => import("@/App.vue"),
-  },
-  {
-    path: "/employee/:employeeId",
-    name: "employee-workplace",
-    component: () => import("@/App.vue"),
-    props: true,
-  },
-];
+import { createRouter, createWebHistory } from 'vue-router'
+import HomeView from '../views/HomeView.vue'
+import ViewerView from '../views/ViewerView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
-  routes,
-});
+  routes: [
+    {
+      path: '/',
+      name: 'home',
+      component: HomeView
+    },
+    {
+      path: '/viewer',
+      name: 'viewer',
+      component: ViewerView
+    }
+  ]
+})
 
-export default router;
+export default router
