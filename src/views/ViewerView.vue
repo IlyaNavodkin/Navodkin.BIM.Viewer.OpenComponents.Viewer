@@ -29,9 +29,7 @@ onBeforeUnmount(() => {
   <div class="viewer-container">
     <div class="full-screen" id="container" ref="containerRef"></div>
     <button @click="goBack" class="back-button">← Назад</button>
-    <LoadingOverlay 
-      :isLoading="loadingState.isLoading"
-      :progress="loadingState.progress"
+    <LoadingOverlay :isLoading="loadingState.isLoading" :progress="loadingState.progress"
       :modelName="loadingState.modelName"
     />
     <SelectedElementPanel :selectedElements="selectedElements" />

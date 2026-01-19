@@ -123,6 +123,15 @@ export function useIFCViewer() {
     highlighter.events.select.onHighlight.add(async (modelIdMap) => {
       console.log("Something was selected");
 
+      const outliner = components.get(OBF.Outliner);
+      outliner!.world = world!;
+      outliner!.color = new THREE.Color("#bcf124");
+      outliner!.thickness = 2;
+      outliner!.fillColor = new THREE.Color("#bcf124");
+      outliner!.fillOpacity = 1;
+
+      outliner!.enabled = true;
+
       const promises = [];
       for (const [modelId, localIds] of Object.entries(modelIdMap)) {
         const model = fragments!.list.get(modelId);
