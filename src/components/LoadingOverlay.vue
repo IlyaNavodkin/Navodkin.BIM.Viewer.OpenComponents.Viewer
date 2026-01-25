@@ -1,7 +1,9 @@
 <template>
   <div v-if="isLoading" class="loading-overlay">
     <div class="loading-content">
-      <h2 class="loading-model-name">{{ modelName || 'Загрузка модели...' }}</h2>
+      <h2 class="loading-model-name">
+        {{ modelName || "Загрузка модели..." }}
+      </h2>
       <div class="progress-container">
         <div class="progress-bar" :style="{ width: `${progress}%` }"></div>
       </div>
@@ -12,16 +14,16 @@
 
 <script setup lang="ts">
 interface Props {
-  isLoading: boolean
-  progress: number
-  modelName?: string | null
+  isLoading: boolean;
+  progress: number;
+  modelName?: string | null;
 }
 
 withDefaults(defineProps<Props>(), {
   isLoading: false,
   progress: 0,
-  modelName: null
-})
+  modelName: null,
+});
 </script>
 
 <style scoped>
@@ -63,7 +65,7 @@ withDefaults(defineProps<Props>(), {
 
 .progress-bar {
   height: 100%;
-  background: #4CAF50;
+  background: #4caf50;
   width: 0%;
   transition: width 0.3s ease;
 }

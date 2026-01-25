@@ -1,41 +1,69 @@
-
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import LoadingOverlay from '../components/LoadingOverlay.vue';
-import SelectedElementPanel from '../components/SelectedElementPanel.vue';
-import { useIFCViewer } from '../composables/useIFCViewer';
+import { onMounted, onBeforeUnmount, ref } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import LoadingOverlay from "../components/LoadingOverlay.vue";
+import SelectedElementPanel from "../components/SelectedElementPanel.vue";
+import { useIFCViewer } from "../composables/useIFCViewer";
+import EmployeeWorkplacePanel from "../components/EmployeeWorkplacePanel.vue";
 
 const router = useRouter();
+const route = useRoute();
 const containerRef = ref<HTMLElement | null>(null);
-const { disposeViewer, setupViewer, selectedElements, loadingState } = useIFCViewer();
+const { disposeViewer, setupViewer, selectedElements, loadingState } =
+  useIFCViewer();
 
 function goBack() {
-  router.push('/');
+  router.push("/");
 }
 
 onMounted(async () => {
   if (!containerRef.value) return;
 
-  await setupViewer(containerRef.value);
+  // Получаем employeeId из параметров маршрута (может быть строкой или массивом)
+  const employeeIdParam = route.params.employeeId;
+  const employeeId = Array.isArray(employeeIdParam)
+    ? employeeIdParam[0]
+    : employeeIdParam;
+
+  await setupViewer(
+    containerRef.value,
+    typeof employeeId === "string" ? employeeId : undefined
+  );
 });
 
 onBeforeUnmount(() => {
   disposeViewer();
 });
+
+const handleCardClick = () => {};
 </script>
 
 <template>
   <div class="viewer-container">
     <div class="full-screen" id="container" ref="containerRef"></div>
     <button @click="goBack" class="back-button">← Назад</button>
-    <LoadingOverlay :isLoading="loadingState.isLoading" :progress="loadingState.progress"
+    <LoadingOverlay
+      :isLoading="loadingState.isLoading"
+      :progress="loadingState.progress"
       :modelName="loadingState.modelName"
+    />
+
+    <EmployeeWorkplacePanel
+      v-if="loadingState.isLoading"
+      :workplace-cards="filteredWorkplaceCards.value"
+      :available-levels="availableLevels.value"
+      :selected-level="selectedLevel.value"
+      :search-query="searchQuery.value"
+      :occupancy-filter="occupancyFilter.value"
+      :selected-local-id="selectedLocalId.value"
+      @update:selectedLevel="handleLevelChange"
+      @update:searchQuery="handleSearchChange"
+      @update:occupancyFilter="handleOccupancyChange"
+      @cardClick="handleCardClick"
     />
     <SelectedElementPanel :selectedElements="selectedElements" />
   </div>
 </template>
-
 
 <style scoped>
 .viewer-container {
@@ -66,6 +94,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: all 0.3s ease;
   font-family: "Plus Jakarta Sans", sans-serif;
+  ly: "Plus Jakarta Sans", sans-serif;
 }
 
 .back-button:hover {

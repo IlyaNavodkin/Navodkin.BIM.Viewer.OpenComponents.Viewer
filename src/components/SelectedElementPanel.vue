@@ -1,8 +1,6 @@
 <template>
   <div v-if="selectedElements.length > 0" class="selected-element-panel">
-    <div class="panel-header">
-      Выделенные элементы:
-    </div>
+    <div class="panel-header">Выделенные элементы:</div>
     <div class="panel-count">
       Выделено элементов: {{ selectedElements.length }}
     </div>
@@ -11,20 +9,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed } from "vue";
 
 interface Props {
-  selectedElements: any[]
+  selectedElements: any[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  selectedElements: () => []
-})
+  selectedElements: () => [],
+});
 
 // Вычисляемое свойство для JSON
 const jsonContent = computed(() => {
-  return JSON.stringify(props.selectedElements, null, 2)
-})
+  return JSON.stringify(props.selectedElements, null, 2);
+});
 </script>
 
 <style scoped>

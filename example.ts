@@ -50,8 +50,7 @@ components.init();
   Now, let's configure the FragmentsManager. This will allow us to load models effortlessly and start manipulating them with ease:
 */
 
-const workerUrl =
-  "/worker.mjs";
+const workerUrl = "/worker.mjs";
 const fragments = components.get(OBC.FragmentsManager);
 fragments.init(workerUrl);
 

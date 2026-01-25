@@ -5,18 +5,23 @@ import { reactive, Ref, ref } from "vue";
 import { FragmentsModel } from "@thatopen/fragments";
 import * as THREE from "three";
 import Stats from "stats.js";
+import { useDataAccessManager } from "./useDataAccess";
+import { useLevels } from "./useLevels";
+import { useIfcSelectManager } from "./useIfcSelectManager";
+import { useWorkplaceManager } from "./useWorkplaceManager";
 
 export function useIFCViewer() {
   const loadingState = reactive({
     isLoading: false,
     progress: 0,
-    modelName: null as string | null
+    modelName: null as string | null,
   });
 
   const selectedElements = ref<any[]>([]);
 
   let fragments: OBC.FragmentsManager | null = null;
   let highlighter: OBF.Highlighter | null = null;
+  let outliner: OBF.Outliner | null = null;
   let stats: Stats | null = null;
   let raycaster: OBC.Raycasters | null = null;
   let world: OBC.SimpleWorld<
@@ -24,7 +29,6 @@ export function useIFCViewer() {
     OBC.SimpleCamera,
     OBF.PostproductionRenderer
   > | null = null;
-
 
   const disposeViewer = () => {
     if (world) {
@@ -43,7 +47,7 @@ export function useIFCViewer() {
     viewerService.reset();
   };
 
-  const setupViewer = async (containerRef: HTMLElement) => {
+  const setupViewer = async (containerRef: HTMLElement, employeeId?: string) => {
     viewerService.initViewer();
     const components = viewerService.getComponents();
 
@@ -120,17 +124,41 @@ export function useIFCViewer() {
       },
     });
 
+    // Включаем postproduction перед использованием Outliner
+    // Это необходимо для инициализации excluded objects pass
+    world.renderer.postproduction.enabled = true;
+
+    const outliner = components.get(OBF.Outliner);
+    outliner!.world = world!;
+    outliner!.color = new THREE.Color("#bcf124");
+    outliner!.thickness = 2;
+    outliner!.fillColor = new THREE.Color("#bcf124");
+    outliner!.fillOpacity = 0.1;
+
+    outliner!.enabled = true;
+
+    const boxer = components.get(OBC.BoundingBoxer);
+
+
+    const dataAccessManager = useDataAccessManager(fragments!);
+    const levelsManager = useLevels(dataAccessManager);
+    const selectManager = useIfcSelectManager(outliner, world, boxer);
+    const workPlaceManager = useWorkplaceManager(dataAccessManager, levelsManager, selectManager);
+
+    // Загружаем рабочие места для модели
+    const modelId = fragments!.list.values().next().value?.modelId;
+    if (modelId) {
+      await workPlaceManager.loadWorkplaces(modelId);
+    }
+
+    // Если передан employeeId, выделяем рабочее место сотрудника
+    if (employeeId) {
+      await workPlaceManager.selectWorkplaceByEmployeeId(employeeId);
+    }
+
+
     highlighter.events.select.onHighlight.add(async (modelIdMap) => {
       console.log("Something was selected");
-
-      const outliner = components.get(OBF.Outliner);
-      outliner!.world = world!;
-      outliner!.color = new THREE.Color("#bcf124");
-      outliner!.thickness = 2;
-      outliner!.fillColor = new THREE.Color("#bcf124");
-      outliner!.fillOpacity = 1;
-
-      outliner!.enabled = true;
 
       const promises = [];
       for (const [modelId, localIds] of Object.entries(modelIdMap)) {
@@ -149,21 +177,21 @@ export function useIFCViewer() {
       console.log("Selection was cleared");
       selectedElements.value = [];
     });
+  };
 
-    stats = new Stats();
-    stats.showPanel(2);
-    document.body.append(stats.dom);
-    stats.dom.style.left = "0px";
-    stats.dom.style.zIndex = "unset";
-    world.renderer.onBeforeUpdate.add(() => stats!.begin());
-    world.renderer.onAfterUpdate.add(() => stats!.end());
+  // stats = new Stats();
+  // stats.showPanel(2);
+  // document.body.append(stats.dom);
+  // stats.dom.style.left = "0px";
+  // stats.dom.style.zIndex = "unset";
+  // world.renderer.onBeforeUpdate.add(() => stats!.begin());
+  // world.renderer.onAfterUpdate.add(() => stats!.end());
 
-  }
   return {
     disposeViewer,
     setupViewer,
 
     selectedElements,
-    loadingState
-  }
+    loadingState,
+  };
 }

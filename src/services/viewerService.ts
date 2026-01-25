@@ -6,7 +6,6 @@ type ModelLoadProgressDoneCallback = (modelId: string) => void;
 
 type ModelLoadedCallback = (model: FragmentsModel) => void;
 
-
 // Singleton для управления components
 class ViewerService {
   private static instance: ViewerService;
@@ -24,7 +23,8 @@ class ViewerService {
   }
 
   private checkComponentsInitialized(): void {
-    if (!this.components) throw new Error("Components not initialized - use initViewer() first");
+    if (!this.components)
+      throw new Error("Components not initialized - use initViewer() first");
   }
 
   getComponents(): OBC.Components {
@@ -44,8 +44,7 @@ class ViewerService {
     this.initIfcLoader(this.components);
   }
 
-
-  async initIfcLoader( components: OBC.Components ): Promise<void> {
+  async initIfcLoader(components: OBC.Components): Promise<void> {
     const ifcLoader = components.get(OBC.IfcLoader);
 
     ifcLoader.onIfcImporterInitialized.add(async () => {
@@ -64,11 +63,7 @@ class ViewerService {
     });
   }
 
-
-  async loadModelByPath(
-    path: string,
-    name: string
-  ): Promise<FragmentsModel> {
+  async loadModelByPath(path: string, name: string): Promise<FragmentsModel> {
     const ifcLoader = this.components!.get(OBC.IfcLoader)!;
 
     try {
@@ -76,22 +71,17 @@ class ViewerService {
       const data = await getFileResponse.arrayBuffer();
       const buffer = new Uint8Array(data);
 
-      const model = await ifcLoader.load(
-        buffer,
-        true,
-        name,
-        {
-          processData: {
-            progressCallback: (progress: number) => {
-              this.progressCallbacks.forEach(callback => {
-                callback(progress);
-              });
-            },
+      const model = await ifcLoader.load(buffer, true, name, {
+        processData: {
+          progressCallback: (progress: number) => {
+            this.progressCallbacks.forEach((callback) => {
+              callback(progress);
+            });
           },
-        }
-      );
+        },
+      });
 
-      this.modelLoadProgressDoneCallbacks.forEach(callback => {
+      this.modelLoadProgressDoneCallbacks.forEach((callback) => {
         callback(name);
       });
 
@@ -99,7 +89,7 @@ class ViewerService {
     } catch (error) {
       console.error("Error loading model:", error);
       throw error;
-    } 
+    }
   }
 
   onProgress(callback: ModelLoadProgressCallback): void {
@@ -133,18 +123,18 @@ class ViewerService {
     }
   }
 
-  initFragmentManager( components: OBC.Components ): OBC.FragmentsManager {
+  initFragmentManager(components: OBC.Components): OBC.FragmentsManager {
     const workerUrl = "/worker.mjs";
 
     const fragments = components.get(OBC.FragmentsManager);
-    
+
     if (!fragments.initialized) {
       console.log("Initializing fragments");
       fragments.init(workerUrl);
 
       fragments.list.onItemSet.add(({ value: model }) => {
         console.log("Item set EVENT", model);
-        this.modelLoadedCallbacks.forEach(callback => {
+        this.modelLoadedCallbacks.forEach((callback) => {
           try {
             callback(model);
           } catch (error) {
@@ -154,7 +144,7 @@ class ViewerService {
         fragments!.core.update(true);
       });
     }
-    
+
     return fragments;
   }
 
@@ -198,8 +188,7 @@ class ViewerService {
     }
   }
 
-
-  private disposeWorlds( components: OBC.Components ): void {
+  private disposeWorlds(components: OBC.Components): void {
     const worlds = components.get(OBC.Worlds);
     if (!worlds) return;
     if (worlds) {
@@ -210,7 +199,7 @@ class ViewerService {
     }
   }
 
-  private disposeModels( components: OBC.Components ): void {
+  private disposeModels(components: OBC.Components): void {
     const fragments = components.get(OBC.FragmentsManager);
     if (fragments) {
       fragments.list.clear();

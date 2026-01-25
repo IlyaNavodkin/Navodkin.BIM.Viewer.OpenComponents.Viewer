@@ -3,20 +3,18 @@
     <div class="home-content">
       <h1>IFC Viewer</h1>
       <p>Просмотр 3D моделей IFC</p>
-      <button @click="goToViewer" class="viewer-button">
-        Открыть вьюер
-      </button>
+      <button @click="goToViewer" class="viewer-button">Открыть вьюер</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { useRouter } from "vue-router";
 
-const router = useRouter()
+const router = useRouter();
 
 function goToViewer() {
-  router.push('/viewer')
+  router.push("/viewer");
 }
 </script>
 
