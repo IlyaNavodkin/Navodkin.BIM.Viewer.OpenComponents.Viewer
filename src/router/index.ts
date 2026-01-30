@@ -15,7 +15,6 @@ const router = createRouter({
       name: "viewer",
       component: ViewerView,
     },
-    // Backward compatibility: old/deep-link format
     {
       path: "/viewer/employee/:employeeId",
       name: "viewer-employee",

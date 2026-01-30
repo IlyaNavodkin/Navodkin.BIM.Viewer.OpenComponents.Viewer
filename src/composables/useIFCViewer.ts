@@ -1,28 +1,123 @@
 import { viewerService } from "../services/viewerService";
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
-import { reactive, Ref, ref } from "vue";
+import { computed, ComputedRef, reactive, Ref, ref, shallowRef } from "vue";
 import { FragmentsModel } from "@thatopen/fragments";
 import * as THREE from "three";
-import Stats from "stats.js";
-import { useDataAccessManager } from "./useDataAccess";
-import { useLevels } from "./useLevels";
-import { useIfcSelectManager } from "./useIfcSelectManager";
-import { useWorkplaceManager } from "./useWorkplaceManager";
+import { IDataAccessManager, useDataAccessManager } from "./useDataAccess";
+import { ILevelManager, type LevelsViewData, useLevels } from "./useLevels";
+import { IIfcSelectManager, useIfcSelectManager } from "./useIfcSelectManager";
+import {
+  type IWorkplaceManager,
+  type WorkplaceCardData,
+  useWorkplaceManager,
+} from "./useWorkplaceManager";
+import { useAirplaneManager, type IAirplaneManager } from "./useAirplaneManager";
 
-export function useIFCViewer() {
-  const loadingState = reactive({
+export type ModelLoadingState = {
+  isLoading: boolean;
+  progress: number;
+  modelName: string | null;
+};
+
+export interface IIFCViewer {
+  modelLoading: ModelLoadingState;
+
+  disposeViewer: () => void;
+  setupViewer: (containerRef: HTMLElement, employeeId?: string) => Promise<void>;
+
+  employeeWorkplace: {
+    isLoading: ComputedRef<boolean>;
+    filteredWorkplaceCards: ComputedRef<WorkplaceCardData[]>;
+    availableLevels: ComputedRef<LevelsViewData[]>;
+    selectedLevel: Ref<string>;
+    searchQuery: Ref<string>;
+    occupancyFilter: Ref<string>;
+    selectedLocalId: ComputedRef<number | null>;
+
+    handleLevelChange: (level: string) => void;
+    handleSearchChange: (query: string) => void;
+    handleOccupancyChange: (filter: string) => void;
+    selectWorkplaceById: (localId: number) => Promise<void>;
+    clearSelection: () => Promise<void>;
+  };
+}
+export function useIFCViewer(): IIFCViewer {
+  const modelLoading = reactive<ModelLoadingState>({
     isLoading: false,
     progress: 0,
-    modelName: null as string | null,
+    modelName: null,
   });
 
-  const selectedElements = ref<any[]>([]);
+  const selectedLevel = ref<string>("all");
+  const searchQuery = ref<string>("");
+  const occupancyFilter = ref<string>("all");
+  const selectedLocalId = computed<number | null>(() => {
+    return workplaceManager.value?.selectedLocalId.value ?? null;
+  });
+
+  const availableLevels = computed<LevelsViewData[]>(() => {
+    return workplaceManager.value?.workPlaceLevels.value ?? [];
+  });
+
+  const isLoading = computed<boolean>(() => {
+    return workplaceManager.value?.isLoading.value ?? false;
+  });
+
+  const filteredWorkplaceCards = computed<
+    WorkplaceCardData[]
+  >(() => {
+    const cards = workplaceManager.value?.workPlaces.value ?? [];
+
+    const level = selectedLevel.value;
+    const filter = occupancyFilter.value;
+    const query = searchQuery.value.trim().toLowerCase();
+
+    return cards.filter((card) => {
+      if (level !== "all") {
+        if (card.level?.name !== level) return false;
+      }
+
+      if (filter === "occupied" && !card.isOccupied) return false;
+      if (filter === "vacant" && card.isOccupied) return false;
+
+      if (!query) return true;
+      const haystack = [
+        card.workplaceNumber,
+        card.employeeName ?? "",
+        card.level?.name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  });
+
+  const handleLevelChange = (level: string) => {
+    selectedLevel.value = level;
+  };
+
+  const handleSearchChange = (query: string) => {
+    searchQuery.value = query;
+  };
+
+  const handleOccupancyChange = (filter: string) => {
+    occupancyFilter.value = filter;
+  };
+
+  const selectWorkplaceById = async (localId: number) => {
+    const manager = workplaceManager.value;
+    if (!manager) return;
+
+    await manager.selectWorkplaceById(localId);
+  };
+
+  const clearSelection = async () => {
+    await workplaceManager.value?.clearWorkplaceSelection();
+  };
 
   let fragments: OBC.FragmentsManager | null = null;
   let highlighter: OBF.Highlighter | null = null;
-  let outliner: OBF.Outliner | null = null;
-  let stats: Stats | null = null;
   let raycaster: OBC.Raycasters | null = null;
   let world: OBC.SimpleWorld<
     OBC.SimpleScene,
@@ -30,7 +125,24 @@ export function useIFCViewer() {
     OBF.PostproductionRenderer
   > | null = null;
 
+
+  const airplaneManager = shallowRef<IAirplaneManager | null>(null);
+  const workplaceManager = shallowRef<IWorkplaceManager | null>(null);
+  const dataAccessManager = shallowRef<IDataAccessManager | null>(null);
+  const levelsManager = shallowRef<ILevelManager | null>(null);
+  const selectManager = shallowRef<IIfcSelectManager | null>(null);
+
   const disposeViewer = () => {
+    if (airplaneManager.value) {
+      airplaneManager.value.dispose();
+      airplaneManager.value = null;
+    }
+
+    if (workplaceManager.value) {
+      workplaceManager.value.clearWorkplaces();
+      workplaceManager.value = null;
+    }
+
     if (world) {
       world!.dispose();
     }
@@ -39,25 +151,26 @@ export function useIFCViewer() {
       highlighter!.dispose();
     }
 
-    if (stats && stats.dom.parentNode) {
-      stats.dom.parentNode.removeChild(stats.dom);
-    }
-
-    // Сбрасываем состояние сервиса (но не удаляем components)
     viewerService.reset();
   };
+
 
   const setupViewer = async (containerRef: HTMLElement, employeeId?: string) => {
     viewerService.initViewer();
     const components = viewerService.getComponents();
 
-    // Setup scene
     const worlds = components.get(OBC.Worlds);
     world = worlds.create<
       OBC.SimpleScene,
       OBC.SimpleCamera,
       OBF.PostproductionRenderer
     >();
+
+
+    const clipper = components.get(OBC.Clipper);
+    clipper.enabled = true;
+
+    const id = clipper.createFromNormalAndCoplanarPoint(world, new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0));
 
     world.scene = new OBC.SimpleScene(components);
     world.scene.setup();
@@ -72,6 +185,31 @@ export function useIFCViewer() {
     world.camera.controls.addEventListener("rest", () =>
       fragments!.core.update(true),
     );
+
+    if (!world) {
+      throw new Error("World not initialized");
+    }
+
+    airplaneManager.value = useAirplaneManager(components, world);
+
+    const airplaneConfigs = [
+      {
+        radius: 15,
+        centerY: 10,
+        speed: 0.5,
+        initialAngle: 0,
+      },
+      {
+        radius: 20,
+        centerY: 12,
+        speed: 0.4,
+        initialAngle: Math.PI,
+      },
+    ];
+
+    airplaneConfigs.forEach((config) => {
+      airplaneManager.value!.createAirplane(config);
+    });
 
     world.onCameraChanged.add((camera: any) => {
       for (const [, model] of fragments!.list) {
@@ -92,20 +230,20 @@ export function useIFCViewer() {
       const modelId = path.split("/").pop()?.split(".").shift();
       if (!modelId) continue;
 
-      loadingState.modelName = modelId;
-      loadingState.isLoading = true;
-      loadingState.progress = 0;
+      modelLoading.modelName = modelId;
+      modelLoading.isLoading = true;
+      modelLoading.progress = 0;
 
       viewerService.onProgress(async (progress: number) => {
         console.log("Progress:", progress);
-        loadingState.progress = progress * 100;
+        modelLoading.progress = progress * 100;
       });
     }
 
     viewerService.onModelLoadProgressDone((modelId: string) => {
-      loadingState.isLoading = false;
-      loadingState.progress = 100;
-      loadingState.modelName = modelId;
+      modelLoading.isLoading = false;
+      modelLoading.progress = 100;
+      modelLoading.modelName = modelId;
     });
 
     await viewerService.loadModelByPath(fragPaths[0], "Test_IFC_Building");
@@ -116,6 +254,7 @@ export function useIFCViewer() {
     highlighter = components.get(OBF.Highlighter);
     highlighter.setup({
       world,
+      selectEnabled: false,
       selectMaterialDefinition: {
         color: new THREE.Color("#bcf124"),
         opacity: 1,
@@ -124,8 +263,6 @@ export function useIFCViewer() {
       },
     });
 
-    // Включаем postproduction перед использованием Outliner
-    // Это необходимо для инициализации excluded objects pass
     world.renderer.postproduction.enabled = true;
 
     const outliner = components.get(OBF.Outliner);
@@ -139,59 +276,48 @@ export function useIFCViewer() {
 
     const boxer = components.get(OBC.BoundingBoxer);
 
+    dataAccessManager.value = useDataAccessManager(fragments!);
+    levelsManager.value = useLevels(dataAccessManager.value);
+    selectManager.value = useIfcSelectManager(outliner, world, boxer);
 
-    const dataAccessManager = useDataAccessManager(fragments!);
-    const levelsManager = useLevels(dataAccessManager);
-    const selectManager = useIfcSelectManager(outliner, world, boxer);
-    const workPlaceManager = useWorkplaceManager(dataAccessManager, levelsManager, selectManager);
+    workplaceManager.value = useWorkplaceManager(
+      dataAccessManager.value,
+      levelsManager.value,
+      selectManager.value,
+      fragments!,
+      world!,
+    );
 
-    // Загружаем рабочие места для модели
     const modelId = fragments!.list.values().next().value?.modelId;
-    if (modelId) {
-      await workPlaceManager.loadWorkplaces(modelId);
+    if (modelId && levelsManager.value) {
+      await levelsManager.value.loadLevels(modelId);
+      await workplaceManager.value.loadWorkplaces(modelId);
     }
 
-    // Если передан employeeId, выделяем рабочее место сотрудника
     if (employeeId) {
-      await workPlaceManager.selectWorkplaceByEmployeeId(employeeId);
+      await workplaceManager.value.selectWorkplaceByEmployeeId(employeeId);
     }
-
-
-    highlighter.events.select.onHighlight.add(async (modelIdMap) => {
-      console.log("Something was selected");
-
-      const promises = [];
-      for (const [modelId, localIds] of Object.entries(modelIdMap)) {
-        const model = fragments!.list.get(modelId);
-        if (!model) continue;
-        promises.push(model.getItemsData([...localIds]));
-      }
-
-      const data = (await Promise.all(promises)).flat();
-      console.log(data);
-
-      selectedElements.value = data;
-    });
-
-    highlighter.events.select.onClear.add(() => {
-      console.log("Selection was cleared");
-      selectedElements.value = [];
-    });
   };
-
-  // stats = new Stats();
-  // stats.showPanel(2);
-  // document.body.append(stats.dom);
-  // stats.dom.style.left = "0px";
-  // stats.dom.style.zIndex = "unset";
-  // world.renderer.onBeforeUpdate.add(() => stats!.begin());
-  // world.renderer.onAfterUpdate.add(() => stats!.end());
 
   return {
     disposeViewer,
     setupViewer,
 
-    selectedElements,
-    loadingState,
+    modelLoading,
+
+    employeeWorkplace: {
+      isLoading,
+      filteredWorkplaceCards,
+      availableLevels,
+      selectedLevel,
+      searchQuery,
+      occupancyFilter,
+      selectedLocalId,
+      handleLevelChange,
+      handleSearchChange,
+      handleOccupancyChange,
+      selectWorkplaceById,
+      clearSelection,
+    },
   };
 }

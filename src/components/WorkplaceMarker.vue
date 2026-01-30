@@ -1,41 +1,37 @@
 <script lang="ts" setup>
-import { watch, computed } from "vue";
-import type { WorkplaceCardData } from "./WorkplaceCard.vue";
-import { useViewerManagerStore } from "@/stores/useViewerManagerStore";
+import { watch, computed, inject } from "vue";
+import { WorkplaceCardData, type IWorkplaceMarkerState } from "../composables/useWorkplaceManager";
 
 export interface WorkplaceMarkerProps {
   card: WorkplaceCardData;
-  viewerId: string;
 }
 
 const props = defineProps<WorkplaceMarkerProps>();
+const markerState = inject<IWorkplaceMarkerState>("markerState");
 
-const viewerManager = useViewerManagerStore();
-const viewerStore = viewerManager.getViewer(props.viewerId);
+if (!markerState) {
+  throw new Error("markerState must be provided");
+}
 
 const isSelected = computed(() => {
-  return viewerStore.features.employeeWorkplace.markers.isSelected(
-    props.card.localId,
-  );
+  return markerState.isSelected(props.card.localId);
 });
 
 const handleClick = (event: MouseEvent) => {
   event.stopPropagation();
   console.log("🟢 Marker clicked:", props.card.localId);
 
-  viewerStore.features.employeeWorkplace.markers.handleClick(
-    props.card.localId,
-  );
+  markerState.handleClick(props.card.localId);
 };
 
 watch(
   () => isSelected.value,
   (newVal) => {
     console.log("🟢 isSelected changed for", props.card.localId, ":", newVal);
-  },
+  }
 );
 
-const getAvatarPlaceholder = (name: string | null) => {
+const getAvatarPlaceholder = (name: string | null | undefined) => {
   if (!name) return "?";
   return name.charAt(0).toUpperCase();
 };

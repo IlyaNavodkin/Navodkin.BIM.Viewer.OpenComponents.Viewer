@@ -2,14 +2,13 @@
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import LoadingOverlay from "../components/LoadingOverlay.vue";
-import SelectedElementPanel from "../components/SelectedElementPanel.vue";
 import { useIFCViewer } from "../composables/useIFCViewer";
 import EmployeeWorkplacePanel from "../components/EmployeeWorkplacePanel.vue";
 
 const router = useRouter();
 const route = useRoute();
 const containerRef = ref<HTMLElement | null>(null);
-const { disposeViewer, setupViewer, selectedElements, loadingState } =
+const { disposeViewer, setupViewer, modelLoading, employeeWorkplace } =
   useIFCViewer();
 
 function goBack() {
@@ -19,7 +18,6 @@ function goBack() {
 onMounted(async () => {
   if (!containerRef.value) return;
 
-  // Получаем employeeId из параметров маршрута (может быть строкой или массивом)
   const employeeIdParam = route.params.employeeId;
   const employeeId = Array.isArray(employeeIdParam)
     ? employeeIdParam[0]
@@ -35,33 +33,36 @@ onBeforeUnmount(() => {
   disposeViewer();
 });
 
-const handleCardClick = () => {};
+const handleCardClick = (localId: number) => {
+  employeeWorkplace.selectWorkplaceById(localId);
+};
 </script>
 
 <template>
   <div class="viewer-container">
-    <div class="full-screen" id="container" ref="containerRef"></div>
-    <button @click="goBack" class="back-button">← Назад</button>
     <LoadingOverlay
-      :isLoading="loadingState.isLoading"
-      :progress="loadingState.progress"
-      :modelName="loadingState.modelName"
+      :isLoading="modelLoading.isLoading"
+      :progress="modelLoading.progress"
+      :modelName="modelLoading.modelName"
     />
+    <div class="full-screen" id="container" ref="containerRef">
+      <button @click="goBack" class="back-button">← Назад</button>
 
-    <EmployeeWorkplacePanel
-      v-if="loadingState.isLoading"
-      :workplace-cards="filteredWorkplaceCards.value"
-      :available-levels="availableLevels.value"
-      :selected-level="selectedLevel.value"
-      :search-query="searchQuery.value"
-      :occupancy-filter="occupancyFilter.value"
-      :selected-local-id="selectedLocalId.value"
-      @update:selectedLevel="handleLevelChange"
-      @update:searchQuery="handleSearchChange"
-      @update:occupancyFilter="handleOccupancyChange"
-      @cardClick="handleCardClick"
-    />
-    <SelectedElementPanel :selectedElements="selectedElements" />
+      <EmployeeWorkplacePanel
+        v-if="!modelLoading.isLoading"
+        :workplace-cards="employeeWorkplace.filteredWorkplaceCards.value"
+        :available-levels="employeeWorkplace.availableLevels.value"
+        :selected-level="employeeWorkplace.selectedLevel.value"
+        :search-query="employeeWorkplace.searchQuery.value"
+        :occupancy-filter="employeeWorkplace.occupancyFilter.value"
+        :selected-local-id="employeeWorkplace.selectedLocalId.value"
+        :is-loading="employeeWorkplace.isLoading.value"
+        @update:selectedLevel="employeeWorkplace.handleLevelChange"
+        @update:searchQuery="employeeWorkplace.handleSearchChange"
+        @update:occupancyFilter="employeeWorkplace.handleOccupancyChange"
+        @cardClick="handleCardClick"
+      />
+    </div>
   </div>
 </template>
 
@@ -94,7 +95,6 @@ const handleCardClick = () => {};
   cursor: pointer;
   transition: all 0.3s ease;
   font-family: "Plus Jakarta Sans", sans-serif;
-  ly: "Plus Jakarta Sans", sans-serif;
 }
 
 .back-button:hover {

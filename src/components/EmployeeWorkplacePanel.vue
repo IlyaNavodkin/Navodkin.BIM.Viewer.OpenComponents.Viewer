@@ -155,14 +155,15 @@ const handleCardClick = (localId: number) => {
             Рабочие места не найдены
           </div>
 
-          <WorkplaceCard
-            v-else
-            v-for="card in props.workplaceCards"
-            :key="card.localId"
-            :card="card"
-            :is-selected="props.selectedLocalId === card.localId"
-            @click="handleCardClick"
-          />
+          <template v-else>
+            <WorkplaceCard
+              v-for="card in props.workplaceCards"
+              :key="card.localId"
+              :card="card"
+              :is-selected="props.selectedLocalId === card.localId"
+              @click="handleCardClick"
+            />
+          </template>
         </div>
       </div>
     </template>
@@ -183,6 +184,7 @@ const handleCardClick = (localId: number) => {
 
   &.collapsed {
     width: auto;
+    height: auto;
   }
 
   &:not(.collapsed) {
@@ -338,6 +340,7 @@ const handleCardClick = (localId: number) => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
 
   &::-webkit-scrollbar {

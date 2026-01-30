@@ -3,7 +3,10 @@
     <div class="home-content">
       <h1>IFC Viewer</h1>
       <p>Просмотр 3D моделей IFC</p>
-      <button @click="goToViewer" class="viewer-button">Открыть вьюер</button>
+      <div class="buttons">
+        <button @click="goToViewer" class="viewer-button">Открыть вьюер</button>
+        <button @click="goToDemo" class="demo-button">ShallowRef Demo</button>
+      </div>
     </div>
   </div>
 </template>
@@ -15,6 +18,10 @@ const router = useRouter();
 
 function goToViewer() {
   router.push("/viewer");
+}
+
+function goToDemo() {
+  router.push("/shallow-ref-demo");
 }
 </script>
 
@@ -45,17 +52,28 @@ function goToViewer() {
   opacity: 0.9;
 }
 
-.viewer-button {
+.buttons {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.viewer-button,
+.demo-button {
   padding: 15px 40px;
   font-size: 18px;
   font-weight: bold;
-  background: #bcf124;
-  color: #000;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.3s ease;
   font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.viewer-button {
+  background: #bcf124;
+  color: #000;
 }
 
 .viewer-button:hover {
@@ -64,6 +82,21 @@ function goToViewer() {
 }
 
 .viewer-button:active {
+  transform: scale(0.98);
+}
+
+.demo-button {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid white;
+}
+
+.demo-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.demo-button:active {
   transform: scale(0.98);
 }
 </style>

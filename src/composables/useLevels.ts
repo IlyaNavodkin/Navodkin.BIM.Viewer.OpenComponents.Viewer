@@ -16,7 +16,7 @@ export interface ILevelManager {
 }
 
 export const useLevels = (dataAccessManager: IDataAccessManager): ILevelManager => {
-  const fileLevels = ref([] as LevelsViewData[]);
+  const fileLevels = ref<LevelsViewData[]>([]);
   const isLoading = ref(false);
 
   const getLevels = async (modelId: string) => {
@@ -24,6 +24,7 @@ export const useLevels = (dataAccessManager: IDataAccessManager): ILevelManager 
     if (!modelFromId) {
       throw new Error(`Model not found for modelId: ${modelId}`);
     }
+
     let levelsViewData: LevelsViewData[] = [];
 
     if (modelFromId) {

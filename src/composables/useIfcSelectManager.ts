@@ -1,6 +1,7 @@
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
 import * as THREE from "three";
+import { expandSphere } from "../utils/threeGeometryUtils";
 
 export interface IIfcSelectManager {
   selectElementsByLocalIds: (modelIdMap: OBC.ModelIdMap) => Promise<void>;
@@ -20,6 +21,7 @@ export const useIfcSelectManager = (
 
 
   const selectElementsByLocalIds = async (modelIdMap: OBC.ModelIdMap) => {
+    outliner.clean();
     await outliner.addItems(modelIdMap)
     await fitCameraToElements(modelIdMap);
   };
@@ -40,9 +42,10 @@ export const useIfcSelectManager = (
       if (box) {
         const sphere = new THREE.Sphere();
         box.getBoundingSphere(sphere);
+        const expandedSphere = expandSphere(sphere, 2);
 
         if (world.camera.hasCameraControls()) {
-          await world.camera.controls.fitToSphere(sphere, true);
+          await world.camera.controls.fitToSphere(expandedSphere, true);
         }
       }
     } catch (error) {

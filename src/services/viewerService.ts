@@ -1,5 +1,5 @@
 import * as OBC from "@thatopen/components";
-import { FragmentsModel } from "@thatopen/fragments";
+import { FragmentsModel, LodMode } from "@thatopen/fragments";
 
 type ModelLoadProgressCallback = (progress: number) => void;
 type ModelLoadProgressDoneCallback = (modelId: string) => void;
@@ -13,7 +13,7 @@ class ViewerService {
   private modelLoadedCallbacks: ModelLoadedCallback[] = [];
   private progressCallbacks: ModelLoadProgressCallback[] = [];
   private modelLoadProgressDoneCallbacks: ModelLoadProgressDoneCallback[] = [];
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): ViewerService {
     if (!ViewerService.instance) {
@@ -80,6 +80,8 @@ class ViewerService {
           },
         },
       });
+
+      model.setLodMode(LodMode.ALL_VISIBLE);
 
       this.modelLoadProgressDoneCallbacks.forEach((callback) => {
         callback(name);
