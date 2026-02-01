@@ -9,7 +9,11 @@ const router = useRouter();
 const route = useRoute();
 const containerRef = ref<HTMLElement | null>(null);
 const { disposeViewer, setupViewer, modelLoading, employeeWorkplace } =
-  useIFCViewer();
+  useIFCViewer({
+    modelPath: "/Test_IFC_Building.ifc",
+    modelName: "Test_IFC_Building",
+    selectionColor: "#bcf124",
+  });
 
 function goBack() {
   router.push("/");

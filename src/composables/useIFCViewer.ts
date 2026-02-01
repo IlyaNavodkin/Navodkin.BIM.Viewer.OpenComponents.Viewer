@@ -20,6 +20,12 @@ export type ModelLoadingState = {
   modelName: string | null;
 };
 
+export type IFCViewerConfig = {
+  modelPath: string;
+  modelName: string;
+  selectionColor: string;
+};
+
 export interface IIFCViewer {
   modelLoading: ModelLoadingState;
 
@@ -42,7 +48,7 @@ export interface IIFCViewer {
     clearSelection: () => Promise<void>;
   };
 }
-export function useIFCViewer(): IIFCViewer {
+export function useIFCViewer(config: IFCViewerConfig): IIFCViewer {
   const modelLoading = reactive<ModelLoadingState>({
     isLoading: false,
     progress: 0,
@@ -166,12 +172,6 @@ export function useIFCViewer(): IIFCViewer {
       OBF.PostproductionRenderer
     >();
 
-
-    const clipper = components.get(OBC.Clipper);
-    clipper.enabled = true;
-
-    const id = clipper.createFromNormalAndCoplanarPoint(world, new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0));
-
     world.scene = new OBC.SimpleScene(components);
     world.scene.setup();
     world.scene.three.background = null;
@@ -224,7 +224,7 @@ export function useIFCViewer(): IIFCViewer {
       world!.scene.three.add(model.object);
     });
 
-    const fragPaths = ["/Test_IFC_Building.ifc"];
+    const fragPaths = [config.modelPath];
 
     for (const path of fragPaths) {
       const modelId = path.split("/").pop()?.split(".").shift();
@@ -246,7 +246,7 @@ export function useIFCViewer(): IIFCViewer {
       modelLoading.modelName = modelId;
     });
 
-    await viewerService.loadModelByPath(fragPaths[0], "Test_IFC_Building");
+    await viewerService.loadModelByPath(fragPaths[0], config.modelName);
 
     raycaster = components.get(OBC.Raycasters);
     raycaster.get(world);
@@ -256,7 +256,7 @@ export function useIFCViewer(): IIFCViewer {
       world,
       selectEnabled: false,
       selectMaterialDefinition: {
-        color: new THREE.Color("#bcf124"),
+        color: new THREE.Color(config.selectionColor),
         opacity: 1,
         transparent: false,
         renderedFaces: 0,
@@ -267,9 +267,9 @@ export function useIFCViewer(): IIFCViewer {
 
     const outliner = components.get(OBF.Outliner);
     outliner!.world = world!;
-    outliner!.color = new THREE.Color("#bcf124");
+    outliner!.color = new THREE.Color(config.selectionColor);
     outliner!.thickness = 2;
-    outliner!.fillColor = new THREE.Color("#bcf124");
+    outliner!.fillColor = new THREE.Color(config.selectionColor);
     outliner!.fillOpacity = 0.1;
 
     outliner!.enabled = true;
