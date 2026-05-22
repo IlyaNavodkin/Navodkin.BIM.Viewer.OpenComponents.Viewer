@@ -1,0 +1,344 @@
+/* MD
+  ## 📐 Measuring Areas
+  ---
+  Calculating the area of an irregular space — a room, a floor plate, a site boundary — from a 3D model requires clicking a polygon boundary and computing the enclosed area accurately. Doing this by hand from coordinates is tedious and error-prone.
+
+  The area measurement tool lets users define a polygon by clicking points in the scene, closes it on Enter, and displays the computed area persistently in the 3D view.
+
+  This tutorial covers configuring the tool with a color; placing area measurements by double-clicking boundary points and pressing Enter to close the polygon; auto-fitting the camera to each new measurement on creation; deleting individual measurements by hovering and pressing Delete; reading all area values from the measurements list; and clearing all measurements at once.
+
+  By the end, you'll have a fully working polygon area measurement tool with persistent results, camera fit on creation, and configurable picking performance.
+
+  ### 🖖 Importing our Libraries
+  First things first, let's install all necessary dependencies to make this example work:
+*/
+
+import * as THREE from "three";
+import Stats from "stats.js";
+import * as OBC from "@thatopen/components";
+import * as BUI from "@thatopen/ui";
+// Local worker bundle so the GPU picker decodes localId from tile.ids
+// correctly. Swap to `OBC.FragmentsManager.getWorker()` for the
+// unpkg-hosted bundle once published.
+import workerUrl from "@thatopen/fragments/worker?url";
+// You have to import * as OBF from "@thatopen/components-front"
+import * as OBF from "../..";
+import * as FRAGS from "@thatopen/fragments";
+
+/* MD
+  ### 🌎 Setting up a Simple Scene
+  To get started, let's set up a basic ThreeJS scene. This will serve as the foundation for our application and allow us to visualize the 3D models effectively:
+*/
+
+const components = new OBC.Components();
+
+const worlds = components.get(OBC.Worlds);
+const world = worlds.create<
+  OBC.SimpleScene,
+  OBC.OrthoPerspectiveCamera,
+  OBF.PostproductionRenderer
+>();
+
+world.scene = new OBC.SimpleScene(components);
+world.scene.setup();
+world.scene.three.background = null;
+
+const container = document.getElementById("container")!;
+world.renderer = new OBF.PostproductionRenderer(components, container);
+world.camera = new OBC.OrthoPerspectiveCamera(components);
+await world.camera.controls.setLookAt(68, 23, -8.5, 21.5, -5.5, 23);
+
+components.init();
+
+/* MD
+  ### 🛠️ Setting Up Fragments
+  Now, let's configure the FragmentsManager. This will allow us to load models effortlessly and start manipulating them with ease:
+*/
+
+// Local worker imported above. To fall back to unpkg, replace the
+// import with `const workerUrl = await OBC.FragmentsManager.getWorker();`.
+const fragments = components.get(OBC.FragmentsManager);
+fragments.init(workerUrl);
+
+world.camera.controls.addEventListener("update", () => fragments.core.update());
+
+world.onCameraChanged.add((camera) => {
+  for (const [, model] of fragments.list) {
+    model.useCamera(camera.three);
+  }
+  fragments.core.update(true);
+});
+
+fragments.list.onItemSet.add(({ value: model }) => {
+  model.useCamera(world.camera.three);
+  world.scene.three.add(model.object);
+  fragments.core.update(true);
+});
+
+// Remove z fighting
+fragments.core.models.materials.list.onItemSet.add(({ value: material }) => {
+  if (!("isLodMaterial" in material && material.isLodMaterial)) {
+    material.polygonOffset = true;
+    material.polygonOffsetUnits = 1;
+    material.polygonOffsetFactor = Math.random();
+  }
+});
+
+/* MD
+  ### 📂 Loading Fragments Models
+  With the core setup complete, it's time to load a Fragments model into our scene. Fragments are optimized for fast loading and rendering, making them ideal for large-scale 3D models.
+
+  :::info Where can I find Fragment files?
+
+  You can use the sample Fragment files available in our repository for testing. If you have an IFC model you'd like to convert to Fragments, check out the IfcImporter tutorial for detailed instructions.
+
+  :::
+*/
+
+const fragPaths = [
+  "https://thatopen.github.io/engine_components/resources/frags/school_arq.frag",
+];
+await Promise.all(
+  fragPaths.map(async (path) => {
+    const modelId = path.split("/").pop()?.split(".").shift();
+    if (!modelId) return null;
+    const file = await fetch(path);
+    const buffer = await file.arrayBuffer();
+    return fragments.core.load(buffer, { modelId });
+  }),
+);
+
+/* MD
+  ### ✨ Using The Area Measurement Component
+  Measuring areas with That Open Engine is straightforward. First, retrieve the corresponding component and configure it if necessary:
+*/
+
+const measurer = components.get(OBF.AreaMeasurement);
+// Provide a world to create dimensions inside
+measurer.world = world;
+measurer.color = new THREE.Color("#494cb6");
+// As a best practice, always set the enabled state after the initial config
+measurer.enabled = true;
+measurer.snappings = [FRAGS.SnappingClass.POINT];
+
+/* MD 
+  You can create dimensions both programatically or by user interaction. The most common way is by user interaction, so let's configure an event listener to create them when the user double clicks on the viewer container:
+*/
+
+container.ondblclick = () => measurer.create();
+window.addEventListener("keydown", (e) => {
+  if (!(e.code === "Enter" || e.code === "NumpadEnter")) return;
+  measurer.endCreation();
+});
+
+/* MD 
+  ### 📄 The Measurements List
+  Whenever you create a dimension using the component, it is automatically added to a list that keeps track of all dimensions. This centralized list allows you to perform various operations, such as deleting dimensions, calculating their centers, reporting all values, and more. To illustrate this functionality, let's implement some useful methods:
+*/
+
+const deleteDimensions = () => {
+  measurer.list.clear();
+};
+
+const getAllValues = () => {
+  const lengths: number[] = [];
+  for (const area of measurer.list) {
+    lengths.push(area.value);
+  }
+  return lengths;
+};
+
+/* MD 
+  Now, when a dimension gets added to the list a couple of things happen. Among them, is the calculation of a bounding box that can be used to know when the cursor is on top of the graphical display of the measurement. That is used internally by the component to allow delete a dimension that is just beneath the mouse. We'll keep it simple and bind this functionality to the keydown event, specifically it will fire when the user presses the `Delete` or `Backspace` key.
+*/
+
+window.onkeydown = (event) => {
+  if (event.code === "Delete" || event.code === "Backspace") {
+    measurer.delete();
+  }
+};
+
+/* MD 
+  ### 🔗 Measurement Events
+  You already know anytime you create a dimension the result will get added to the list. When something happens to the list (a dimension has been added or deleted, for example) you can perform side actions by just listening to the corresponding events. Just for fun, let's zoom into the dimension once it has been created:
+*/
+
+measurer.list.onItemAdded.add((area) => {
+  if (!area.boundingBox) return;
+  const sphere = new THREE.Sphere();
+  area.boundingBox.getBoundingSphere(sphere);
+  world.camera.controls.fitToSphere(sphere, true);
+});
+
+/* MD
+  ### 🧩 Adding some UI (optional but recommended)
+  We will use the `@thatopen/ui` library to add some simple and cool UI elements to our app. First, we need to call the `init` method of the `BUI.Manager` class to initialize the library:
+*/
+
+BUI.Manager.init();
+
+// Reusable snap-class + range controls. The measurer's `snappings`
+// array holds the snap classes the picker considers; toggling a
+// checkbox adds / removes the corresponding class. The range slider
+// drives the shared `SnapResolver.maxDistance` — distance from the
+// pick point at which a vertex / edge / face is considered a snap
+// candidate, in model units (typically meters).
+const snapResolver = components.get(OBC.SnapResolvers).get();
+const hasSnap = (cls: FRAGS.SnappingClass) =>
+  measurer.snappings?.includes(cls) ?? false;
+const toggleSnap = (cls: FRAGS.SnappingClass, on: boolean) => {
+  const current = new Set(measurer.snappings ?? []);
+  if (on) current.add(cls);
+  else current.delete(cls);
+  measurer.snappings = Array.from(current);
+};
+const snapControls = () => BUI.html`
+  <bim-checkbox label="Snap: Point" ?checked=${hasSnap(FRAGS.SnappingClass.POINT)}
+    @change="${({ target }: { target: BUI.Checkbox }) =>
+      toggleSnap(FRAGS.SnappingClass.POINT, target.value)}">
+  </bim-checkbox>
+  <bim-checkbox label="Snap: Line" ?checked=${hasSnap(FRAGS.SnappingClass.LINE)}
+    @change="${({ target }: { target: BUI.Checkbox }) =>
+      toggleSnap(FRAGS.SnappingClass.LINE, target.value)}">
+  </bim-checkbox>
+  <bim-checkbox label="Snap: Face" ?checked=${hasSnap(FRAGS.SnappingClass.FACE)}
+    @change="${({ target }: { target: BUI.Checkbox }) =>
+      toggleSnap(FRAGS.SnappingClass.FACE, target.value)}">
+  </bim-checkbox>
+  <bim-number-input slider step="0.05" label="Snap Range"
+    value="${snapResolver.maxDistance}" min="0.05" max="5"
+    @change="${({ target }: { target: BUI.NumberInput }) => {
+      snapResolver.maxDistance = target.value;
+    }}">
+  </bim-number-input>
+`;
+
+/* MD
+Now we will add some UI to play around with the actions in this tutorial. For more information about the UI library, you can check the specific documentation for it!
+*/
+
+const panel = BUI.Component.create<BUI.PanelSection>(() => {
+  const onLogValues = () => {
+    const data = getAllValues();
+    console.log(data);
+  };
+
+  return BUI.html`
+    <bim-panel active label="Area Measurement Tutorial" class="options-menu">
+      <bim-panel-section label="Controls">
+          <bim-label>Create dimension: Double click</bim-label>  
+          <bim-label>Delete dimension: Delete</bim-label>  
+      </bim-panel-section>
+      
+      <bim-panel-section label="Measurer">
+        <bim-checkbox checked label="Enabled" 
+          @change="${({ target }: { target: BUI.Checkbox }) => {
+            measurer.enabled = target.value;
+          }}">  
+        </bim-checkbox>       
+        <bim-checkbox checked label="Measurements Visible" 
+          @change="${({ target }: { target: BUI.Checkbox }) => {
+            measurer.visible = target.value;
+          }}">  
+        </bim-checkbox>  
+        
+<bim-number-input
+          slider step="1" label="Picker Size" value="${measurer.pickerSize}" min="2" max="20"
+          @change="${({ target }: { target: BUI.NumberInput }) => {
+            measurer.pickerSize = target.value;
+          }}">
+        </bim-number-input>
+
+        <bim-color-input 
+          label="Color" color=#${measurer.linesMaterial.color.getHexString()}
+          @input="${({ target }: { target: BUI.ColorInput }) => {
+            measurer.color = new THREE.Color(target.color);
+          }}">
+        </bim-color-input>
+        
+        <bim-dropdown
+          label="Measure Mode" required
+          @change="${({ target }: { target: BUI.Dropdown }) => {
+            const [mode] = target.value;
+            measurer.mode = mode;
+          }}"> ${measurer.modes.map(
+            (mode) =>
+              BUI.html`<bim-option label=${mode} value=${mode} ?checked=${mode === measurer.mode}></bim-option>`,
+          )}
+        </bim-dropdown>
+
+        ${snapControls()}
+
+        <bim-dropdown 
+          label="Units" required
+          @change="${({ target }: { target: BUI.Dropdown }) => {
+            const [units] = target.value;
+            measurer.units = units;
+          }}">
+          ${measurer.unitsList.map(
+            (unit) =>
+              BUI.html`<bim-option label=${unit} value=${unit} ?checked=${unit === measurer.units}></bim-option>`,
+          )}
+        </bim-dropdown>
+
+        <bim-dropdown 
+          label="Precision" required
+          @change="${({ target }: { target: BUI.Dropdown }) => {
+            const [rounding] = target.value;
+            measurer.rounding = rounding;
+          }}">
+          <bim-option label="0" value=0></bim-option>
+          <bim-option label="1" value=1></bim-option>
+          <bim-option label="2" value=2 checked></bim-option>
+          <bim-option label="3" value=3></bim-option>
+          <bim-option label="4" value=4></bim-option>
+          <bim-option label="5" value=5></bim-option>
+        </bim-dropdown>
+
+        <bim-button label="Delete all" @click=${() => deleteDimensions()}></bim-button>
+        
+        <bim-button label="Log Values" @click=${onLogValues}></bim-button>
+      </bim-panel-section>
+    </bim-panel>
+  `;
+});
+
+document.body.append(panel);
+
+/* MD
+  And we will make some logic that adds a button to the screen when the user is visiting our app from their phone, allowing to show or hide the menu. Otherwise, the menu would make the app unusable.
+*/
+
+const button = BUI.Component.create<BUI.PanelSection>(() => {
+  return BUI.html`
+      <bim-button class="phone-menu-toggler" icon="solar:settings-bold"
+        @click="${() => {
+          if (panel.classList.contains("options-menu-visible")) {
+            panel.classList.remove("options-menu-visible");
+          } else {
+            panel.classList.add("options-menu-visible");
+          }
+        }}">
+      </bim-button>
+    `;
+});
+
+document.body.append(button);
+
+/* MD
+  ### ⏱️ Measuring the performance (optional)
+  We'll use the [Stats.js](https://github.com/mrdoob/stats.js) to measure the performance of our app. We will add it to the top left corner of the viewport. This way, we'll make sure that the memory consumption and the FPS of our app are under control.
+*/
+
+const stats = new Stats();
+stats.showPanel(2);
+document.body.append(stats.dom);
+stats.dom.style.left = "0px";
+stats.dom.style.zIndex = "unset";
+world.renderer.onBeforeUpdate.add(() => stats.begin());
+world.renderer.onAfterUpdate.add(() => stats.end());
+
+/* MD
+  ### 🎉 Wrap up
+  That's it! Now you're able to measure areas in your BIM application. Congratulations! Keep going with more tutorials in the documentation.
+*/
