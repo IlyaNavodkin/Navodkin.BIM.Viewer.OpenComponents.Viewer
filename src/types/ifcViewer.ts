@@ -37,6 +37,13 @@ export interface IfcViewerSelectedElement {
   properties: IfcViewerPropertyGroup[];
 }
 
+export interface IfcViewerSelectionState {
+  activeTreeNodeId: string | null;
+  highlightedTreeNodeIds: string[];
+  selectionAnchorTreeNodeId: string | null;
+  highlightedElementIds: string[];
+}
+
 export interface IfcViewerContextMenuState {
   isVisible: boolean;
   x: number;
@@ -54,6 +61,7 @@ export interface IfcViewerStateSnapshot {
   errorMessage: string | null;
   models: IfcViewerModelTreeNode[];
   selectedElement: IfcViewerSelectedElement | null;
+  selection: IfcViewerSelectionState;
   contextMenu: IfcViewerContextMenuState;
 }
 

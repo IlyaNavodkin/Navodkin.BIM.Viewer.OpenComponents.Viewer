@@ -3,11 +3,13 @@ import * as THREE from "three";
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
 import type * as FRAGS from "@thatopen/fragments";
+import Stats from "stats.js";
 import workerUrl from "@thatopen/fragments/dist/Worker/worker.mjs?url";
 import webIfcWasmUrl from "web-ifc/web-ifc.wasm?url";
 import type {
   IfcViewerPropertyEntry,
   IfcViewerPropertyGroup,
+  IfcViewerSelectionState,
   IfcViewerTreeNode,
 } from "../types/ifcViewer";
 import type { IIfcViewerProjectComposable } from "./useIfcViewerProject";
@@ -30,6 +32,11 @@ export interface IIfcViewerEngineComposable {
   unmount(): void;
   loadFiles(files: File[]): Promise<void>;
   selectElement(modelId: string, localId: number): Promise<void>;
+  applySelection(
+    activeElementId: string | null,
+    highlightedElementIds: string[],
+  ): Promise<void>;
+  focusElements(elementIds: string[]): Promise<void>;
   removeModel(modelId: string): Promise<void>;
 }
 
@@ -46,6 +53,24 @@ const PROPERTY_RELATION_KEYS = new Set([
 
 function createElementId(modelId: string, localId: number) {
   return `${modelId}:${localId}`;
+}
+
+function parseElementId(elementId: string) {
+  const separatorIndex = elementId.lastIndexOf(":");
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const modelId = elementId.slice(0, separatorIndex);
+  const localId = Number(elementId.slice(separatorIndex + 1));
+  if (!modelId || Number.isNaN(localId)) {
+    return null;
+  }
+
+  return {
+    modelId,
+    localId,
+  };
 }
 
 function createTreeNodeId(
@@ -70,6 +95,10 @@ function createModelId(fileName: string, index: number) {
     .replace(/(^-|-$)/g, "");
 
   return `${normalized || "ifc-model"}-${index}`;
+}
+
+function uniqueIds(ids: string[]) {
+  return [...new Set(ids)];
 }
 
 function resolveWasmDirectoryPath(wasmAssetUrl: string) {
@@ -251,6 +280,90 @@ function createSpatialTreeNodes(
   };
 }
 
+function findTreeNodeById(nodes: IfcViewerTreeNode[], nodeId: string): IfcViewerTreeNode | null {
+  for (const node of nodes) {
+    if (node.id === nodeId) {
+      return node;
+    }
+
+    const nestedMatch = findTreeNodeById(node.children, nodeId);
+    if (nestedMatch) {
+      return nestedMatch;
+    }
+  }
+
+  return null;
+}
+
+function findTreeNodeByElementId(
+  nodes: IfcViewerTreeNode[],
+  elementId: string,
+): IfcViewerTreeNode | null {
+  const parsed = parseElementId(elementId);
+  if (!parsed) {
+    return null;
+  }
+
+  for (const node of nodes) {
+    if (
+      node.modelId === parsed.modelId &&
+      node.localId === parsed.localId
+    ) {
+      return node;
+    }
+
+    const nestedMatch = findTreeNodeByElementId(node.children, elementId);
+    if (nestedMatch) {
+      return nestedMatch;
+    }
+  }
+
+  return null;
+}
+
+function buildSelectionStateFromElementIds(
+  models: { rootNodes: IfcViewerTreeNode[] }[],
+  highlightedElementIds: string[],
+  activeElementId: string | null,
+): IfcViewerSelectionState {
+  const highlightedTreeNodeIds = uniqueIds(
+    highlightedElementIds
+      .map((elementId) => {
+        for (const model of models) {
+          const match = findTreeNodeByElementId(model.rootNodes, elementId);
+          if (match) {
+            return match.id;
+          }
+        }
+
+        return null;
+      })
+      .filter((nodeId): nodeId is string => Boolean(nodeId)),
+  );
+
+  const activeTreeNodeId = activeElementId
+    ? highlightedTreeNodeIds.find((nodeId) => {
+        for (const model of models) {
+          const node = findTreeNodeById(model.rootNodes, nodeId);
+          if (!node || node.localId === null) {
+            continue;
+          }
+
+          return createElementId(node.modelId, node.localId) === activeElementId;
+        }
+
+        return false;
+      }) ?? highlightedTreeNodeIds[0] ?? null
+    : highlightedTreeNodeIds[0] ?? null;
+
+  return {
+    activeTreeNodeId,
+    highlightedTreeNodeIds,
+    selectionAnchorTreeNodeId: activeTreeNodeId,
+    highlightedElementIds: uniqueIds(highlightedElementIds),
+  };
+}
+
 export function useIfcViewerEngine(
   params: IIfcViewerEngineComposableParams,
 ): IIfcViewerEngineComposable {
@@ -259,73 +372,83 @@ export function useIfcViewerEngine(
     | OBC.World<
         OBC.SimpleScene,
         OBC.OrthoPerspectiveCamera,
-        OBF.PostproductionRenderer
+        OBC.SimpleRenderer
       >
     | null = null;
   let fragments: OBC.FragmentsManager | null = null;
   let ifcLoader: OBC.IfcLoader | null = null;
   let highlighter: OBF.Highlighter | null = null;
   let mountedContainer: HTMLDivElement | null = null;
+  let performanceStats: Stats | null = null;
+  let onRendererBeforeUpdate: (() => void) | null = null;
+  let onRendererAfterUpdate: (() => void) | null = null;
   let modelSequence = 0;
   let selectionRequestId = 0;
+  let suppressedSelectionEvents = 0;
+  let pendingActiveElementId: string | null = null;
 
   const runtimeModels = new Map<string, RuntimeModelEntry>();
   const isMounted = computed(() => mountedContainer !== null);
 
   const getModel = (modelId: string) => fragments?.list.get(modelId) ?? null;
 
-  const setIdleStatus = () => {
-    const count = params.project.models.value.length;
-    const statusText =
-      count > 0 ? `${count} model${count > 1 ? "s" : ""} loaded` : "Empty project";
+  const createModelIdMap = (elementIds: string[]) => {
+    const modelIdMap: OBC.ModelIdMap = {};
 
-    params.viewerStore.setLoading({
-      isLoading: false,
-      progress: null,
-      statusText,
-    });
+    for (const elementId of uniqueIds(elementIds)) {
+      const parsed = parseElementId(elementId);
+      if (!parsed) {
+        continue;
+      }
+
+      const entry = modelIdMap[parsed.modelId] ?? new Set<number>();
+      entry.add(parsed.localId);
+      modelIdMap[parsed.modelId] = entry;
+    }
+
+    return modelIdMap;
   };
 
-  const syncSelectionFromMap = async (modelIdMap: OBC.ModelIdMap) => {
+  const resolveActiveElementId = (highlightedElementIds: string[]) => {
+    if (
+      pendingActiveElementId &&
+      highlightedElementIds.includes(pendingActiveElementId)
+    ) {
+      return pendingActiveElementId;
+    }
+
+    const currentActiveElementId = params.selection.selectedElement.value?.elementId ?? null;
+    if (
+      currentActiveElementId &&
+      highlightedElementIds.includes(currentActiveElementId)
+    ) {
+      return currentActiveElementId;
+    }
+
+    return highlightedElementIds[0] ?? null;
+  };
+
+  const loadSelectedElementDetails = async (elementId: string | null) => {
+    if (!elementId) {
+      params.selection.setSelectedElement(null);
+      return;
+    }
+
+    const parsed = parseElementId(elementId);
+    if (!parsed) {
+      params.selection.setSelectedElement(null);
+      return;
+    }
+
+    const model = getModel(parsed.modelId);
+    if (!model) {
+      params.selection.setSelectedElement(null);
+      return;
+    }
+
     selectionRequestId += 1;
     const requestId = selectionRequestId;
-
-    const [modelId] = Object.keys(modelIdMap);
-    const localId = modelId ? [...modelIdMap[modelId]][0] : undefined;
-
-    if (!modelId || localId === undefined) {
-      params.selection.clearSelection();
-      return;
-    }
-
-    const model = getModel(modelId);
-    if (!model) {
-      params.selection.clearSelection();
-      return;
-    }
-
-    const [summaryData] = await model.getItemsData([localId], {
-      attributesDefault: true,
-      relationsDefault: {
-        attributes: false,
-        relations: false,
-      },
-    });
-
-    if (!summaryData || requestId !== selectionRequestId) {
-      params.selection.clearSelection();
-      return;
-    }
-
-    params.selection.setSelectedElement({
-      elementId: createElementId(modelId, localId),
-      modelId,
-      localId,
-      displayName: getDisplayName(summaryData, localId, "Element"),
-      properties: createPropertyGroups(summaryData),
-    });
-
-    const [detailsData] = await model.getItemsData([localId], {
+    const [detailsData] = await model.getItemsData([parsed.localId], {
       attributesDefault: true,
       relations: {
         IsDefinedBy: { attributes: true, relations: true },
@@ -343,12 +466,53 @@ export function useIfcViewerEngine(
     }
 
     params.selection.setSelectedElement({
-      elementId: createElementId(modelId, localId),
-      modelId,
-      localId,
-      displayName: getDisplayName(detailsData, localId, "Element"),
+      elementId,
+      modelId: parsed.modelId,
+      localId: parsed.localId,
+      displayName: getDisplayName(detailsData, parsed.localId, "Element"),
       properties: createPropertyGroups(detailsData),
     });
+  };
+
+  const setIdleStatus = () => {
+    const count = params.project.models.value.length;
+    const statusText =
+      count > 0 ? `${count} model${count > 1 ? "s" : ""} loaded` : "Empty project";
+
+    params.viewerStore.setLoading({
+      isLoading: false,
+      progress: null,
+      statusText,
+    });
+  };
+
+  const syncSelectionFromMap = async (modelIdMap: OBC.ModelIdMap) => {
+    if (suppressedSelectionEvents > 0) {
+      suppressedSelectionEvents -= 1;
+      return;
+    }
+
+    const highlightedElementIds = Object.entries(modelIdMap).flatMap(
+      ([modelId, localIds]) =>
+        [...localIds].map((localId) => createElementId(modelId, localId)),
+    );
+
+    if (highlightedElementIds.length === 0) {
+      params.selection.clearSelection();
+      pendingActiveElementId = null;
+      return;
+    }
+
+    const activeElementId = resolveActiveElementId(highlightedElementIds);
+    params.selection.setSelectionState(
+      buildSelectionStateFromElementIds(
+        params.project.models.value,
+        highlightedElementIds,
+        activeElementId,
+      ),
+    );
+    pendingActiveElementId = null;
+    await loadSelectedElementDetails(activeElementId);
   };
 
   const buildTreeForModel = async (
@@ -379,19 +543,18 @@ export function useIfcViewerEngine(
     world = worlds.create<
       OBC.SimpleScene,
       OBC.OrthoPerspectiveCamera,
-      OBF.PostproductionRenderer
+      OBC.SimpleRenderer
     >();
 
     world.scene = new OBC.SimpleScene(components);
     world.scene.setup();
     world.scene.three.background = new THREE.Color("#0b1627");
 
-    world.renderer = new OBF.PostproductionRenderer(components, container);
+    world.renderer = new OBC.SimpleRenderer(components, container);
     world.camera = new OBC.OrthoPerspectiveCamera(components);
     await world.camera.controls.setLookAt(32, 24, 32, 0, 0, 0);
 
     components.init();
-    world.renderer.postproduction.enabled = true;
     components.get(OBC.Grids).create(world);
 
     fragments = components.get(OBC.FragmentsManager);
@@ -447,7 +610,7 @@ export function useIfcViewerEngine(
     components.get(OBC.Raycasters).get(world);
 
     highlighter = components.get(OBF.Highlighter);
-    highlighter.multiple = "none";
+    highlighter.multiple = "ctrlKey";
     highlighter.zoomToSelection = false;
     highlighter.setup({
       world,
@@ -464,8 +627,32 @@ export function useIfcViewerEngine(
     });
 
     highlighter.events.select.onClear.add(() => {
+      if (suppressedSelectionEvents > 0) {
+        suppressedSelectionEvents -= 1;
+        return;
+      }
+
+      pendingActiveElementId = null;
       params.selection.clearSelection();
     });
+
+    performanceStats = new Stats();
+    performanceStats.showPanel("memory" in performance ? 2 : 0);
+    performanceStats.dom.style.position = "absolute";
+    performanceStats.dom.style.top = "0";
+    performanceStats.dom.style.left = "0";
+    performanceStats.dom.style.zIndex = "unset";
+    container.append(performanceStats.dom);
+
+    onRendererBeforeUpdate = () => {
+      performanceStats?.begin();
+    };
+    onRendererAfterUpdate = () => {
+      performanceStats?.end();
+    };
+
+    world.renderer.onBeforeUpdate.add(onRendererBeforeUpdate);
+    world.renderer.onAfterUpdate.add(onRendererAfterUpdate);
 
     mountedContainer = container;
     params.viewerStore.setReady(true);
@@ -475,11 +662,25 @@ export function useIfcViewerEngine(
   const disposeRuntime = () => {
     params.selection.clearSelection();
     runtimeModels.clear();
+
+    if (world && onRendererBeforeUpdate) {
+      world.renderer.onBeforeUpdate.remove(onRendererBeforeUpdate);
+    }
+
+    if (world && onRendererAfterUpdate) {
+      world.renderer.onAfterUpdate.remove(onRendererAfterUpdate);
+    }
+
+    performanceStats?.dom.remove();
+
     mountedContainer = null;
     highlighter = null;
     ifcLoader = null;
     fragments = null;
     world = null;
+    performanceStats = null;
+    onRendererBeforeUpdate = null;
+    onRendererAfterUpdate = null;
 
     if (components) {
       components.dispose();
@@ -572,10 +773,12 @@ export function useIfcViewerEngine(
     },
     selectElement: async (modelId, localId) => {
       if (!highlighter) {
+        await loadSelectedElementDetails(createElementId(modelId, localId));
         return;
       }
 
-      await highlighter.highlightByID(
+      pendingActiveElementId = createElementId(modelId, localId);
+      await highlighter?.highlightByID(
         "select",
         {
           [modelId]: new Set([localId]),
@@ -583,6 +786,47 @@ export function useIfcViewerEngine(
         true,
         false,
       );
+    },
+    applySelection: async (activeElementId, highlightedElementIds) => {
+      if (!highlighter) {
+        await loadSelectedElementDetails(activeElementId);
+        pendingActiveElementId = null;
+        return;
+      }
+
+      if (highlightedElementIds.length === 0) {
+        pendingActiveElementId = null;
+        suppressedSelectionEvents += 1;
+        await highlighter.clear("select");
+        params.selection.setSelectedElement(null);
+        return;
+      }
+
+      pendingActiveElementId = activeElementId;
+      suppressedSelectionEvents += 1;
+      await highlighter.highlightByID(
+        "select",
+        createModelIdMap(highlightedElementIds),
+        true,
+        false,
+      );
+      await loadSelectedElementDetails(activeElementId);
+      pendingActiveElementId = null;
+    },
+    focusElements: async (elementIds) => {
+      if (!highlighter || elementIds.length === 0) {
+        return;
+      }
+
+      pendingActiveElementId = resolveActiveElementId(elementIds);
+      suppressedSelectionEvents += 1;
+      await highlighter.highlightByID(
+        "select",
+        createModelIdMap(elementIds),
+        true,
+        true,
+      );
+      pendingActiveElementId = null;
     },
     removeModel: async (modelId) => {
       const model = getModel(modelId);

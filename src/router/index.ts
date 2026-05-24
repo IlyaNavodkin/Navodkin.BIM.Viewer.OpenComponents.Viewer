@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from "vue-router";
 import BrandTokensView from "../views/BrandTokensView.vue";
 import HomeView from "../views/HomeView.vue";
 import IfcViewerView from "../views/IfcViewerView.vue";
+import MockupProjectCreateView from "../views/mockups/MockupProjectCreateView.vue";
+import MockupWorkspaceView from "../views/mockups/MockupWorkspaceView.vue";
 import QuasarComponentsView from "../views/QuasarComponentsView.vue";
 import QuasarFormView from "../views/QuasarFormView.vue";
 
@@ -37,6 +39,16 @@ const router = createRouter({
       path: "/brand-tokens",
       name: "brand-tokens",
       component: BrandTokensView,
+    },
+    {
+      path: "/mockups",
+      name: "mockup-project-create",
+      component: MockupProjectCreateView,
+    },
+    {
+      path: "/mockups/workspace",
+      name: "mockup-workspace",
+      component: MockupWorkspaceView,
     },
   ],
 });

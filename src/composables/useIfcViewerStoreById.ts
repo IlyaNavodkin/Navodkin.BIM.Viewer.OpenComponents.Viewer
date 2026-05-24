@@ -3,6 +3,7 @@ import { storeToRefs } from "pinia";
 import { useIfcViewerRegistryStore } from "../stores/ifcViewerRegistry";
 import type {
   IfcViewerModelTreeNode,
+  IfcViewerSelectionState,
   IfcViewerSelectedElement,
   IfcViewerStateSnapshot,
   IfcViewerTreeNode,
@@ -34,6 +35,7 @@ export interface IIfcViewerStoreByIdComposable {
     nodeId: string,
     patch: Partial<IfcViewerTreeNode>,
   ): void;
+  setSelectionState(selection: IfcViewerSelectionState): void;
   setSelectedElement(element: IfcViewerSelectedElement | null): void;
   showContextMenu(payload: { x: number; y: number; modelId: string }): void;
   hideContextMenu(): void;
@@ -76,6 +78,8 @@ export function useIfcViewerStoreById(
       registryStore.setModelTree(params.viewerId, modelId, rootNodes),
     updateTreeNode: (modelId, nodeId, patch) =>
       registryStore.updateTreeNode(params.viewerId, modelId, nodeId, patch),
+    setSelectionState: (selection) =>
+      registryStore.setSelectionState(params.viewerId, selection),
     setSelectedElement: (element) =>
       registryStore.setSelectedElement(params.viewerId, element),
     showContextMenu: (payload) =>

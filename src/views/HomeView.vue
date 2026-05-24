@@ -13,6 +13,13 @@
 
             <div class="quick-links">
               <q-btn
+                :to="{ name: 'mockup-project-create' }"
+                label="Mockup Preview"
+                no-caps
+                outline
+                class="quick-btn"
+              />
+              <q-btn
                 :to="{ name: 'brand-tokens' }"
                 label="Brand Tokens Lab"
                 no-caps

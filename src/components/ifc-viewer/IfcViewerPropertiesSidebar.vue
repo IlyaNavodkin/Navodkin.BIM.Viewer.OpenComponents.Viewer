@@ -1,22 +1,55 @@
 <template>
   <aside :class="$style.sidebar">
-    <template v-if="selectedElement">
-      <div :class="$style.header">
-        <div :class="$style.eyebrow">Selected Element</div>
-        <h2 :class="$style.title">{{ selectedElement.displayName }}</h2>
-        <div :class="$style.meta">
+    <div :class="$style.header">
+      <div>
+        <div :class="$style.title">Properties</div>
+        <div :class="$style.subtitle">
+          Inspect grouped IFC metadata for the active selection.
+        </div>
+      </div>
+      <div :class="$style.typeChip">
+        {{
+          hasMultipleSelection
+            ? `${highlightedNodeCount} selected`
+            : selectedElement
+              ? `${selectedElement.properties.length} sets`
+              : "No selection"
+        }}
+      </div>
+    </div>
+
+    <label :class="$style.searchField">
+      <q-icon name="search" size="14px" :class="$style.searchIcon" />
+      <input
+        v-model="searchTerm"
+        :class="$style.searchInput"
+        type="search"
+        placeholder="Search property, group, or value"
+        :disabled="!canShowProperties"
+      />
+    </label>
+
+    <template v-if="canShowProperties && selectedElement">
+      <div :class="$style.selectionCard">
+        <div :class="$style.selectionLabel">{{ selectedElement.displayName }}</div>
+        <div :class="$style.selectionMeta">
           <span>Model: {{ selectedElement.modelId }}</span>
           <span>Local ID: {{ selectedElement.localId }}</span>
+          <span>{{ filteredEntryCount }} entries</span>
         </div>
       </div>
 
-      <div :class="$style.body">
+      <div v-if="filteredGroups.length" :class="$style.body">
         <section
-          v-for="group in selectedElement.properties"
+          v-for="group in filteredGroups"
           :key="group.name"
           :class="$style.group"
         >
-          <h3 :class="$style.groupTitle">{{ group.name }}</h3>
+          <div :class="$style.groupHeader">
+            <h3 :class="$style.groupTitle">{{ group.name }}</h3>
+            <span :class="$style.groupCount">{{ group.entries.length }}</span>
+          </div>
+
           <dl :class="$style.propertyList">
             <template v-for="entry in group.entries" :key="`${group.name}:${entry.name}`">
               <dt :class="$style.propertyName">{{ entry.name }}</dt>
@@ -25,95 +58,218 @@
           </dl>
         </section>
       </div>
+
+      <div v-else :class="$style.emptyState">
+        <div :class="$style.emptyTitle">No properties matched the filter</div>
+        <div :class="$style.emptyText">
+          Clear or broaden the current search to inspect more IFC metadata.
+        </div>
+      </div>
     </template>
 
-    <div :class="$style.emptyState" v-else>
+    <div v-else-if="hasMultipleSelection" :class="$style.emptyState">
+      <div :class="$style.emptyTitle">Multiple items selected</div>
+      <div :class="$style.emptyText">
+        Keep a single tree item active to inspect one IFC property set at a time.
+      </div>
+    </div>
+
+    <div v-else :class="$style.emptyState">
       <div :class="$style.emptyTitle">No element selected</div>
       <div :class="$style.emptyText">
-        Select an IFC element in the tree or directly in the viewer to inspect
-        grouped properties.
+        Select an IFC element in the tree or directly in the viewer to inspect grouped properties.
       </div>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import type { IfcViewerSelectedElement } from "../../types/ifcViewer";
+import { computed, ref } from "vue";
+import type { IfcViewerPropertyGroup, IfcViewerSelectedElement } from "../../types/ifcViewer";
 
 export interface IIfcViewerPropertiesSidebarProps {
   selectedElement: IfcViewerSelectedElement | null;
+  highlightedNodeCount: number;
 }
 
-defineProps<IIfcViewerPropertiesSidebarProps>();
+const props = defineProps<IIfcViewerPropertiesSidebarProps>();
+const searchTerm = ref("");
+const hasMultipleSelection = computed(() => props.highlightedNodeCount > 1);
+const canShowProperties = computed(
+  () => Boolean(props.selectedElement) && !hasMultipleSelection.value,
+);
+
+const filteredGroups = computed<IfcViewerPropertyGroup[]>(() => {
+  if (!canShowProperties.value || !props.selectedElement) {
+    return [];
+  }
+
+  const normalized = searchTerm.value.trim().toLowerCase();
+  if (!normalized) {
+    return props.selectedElement.properties;
+  }
+
+  return props.selectedElement.properties
+    .map((group) => {
+      const groupMatches = group.name.toLowerCase().includes(normalized);
+      const entries = group.entries.filter((entry) =>
+        `${entry.name} ${entry.value}`.toLowerCase().includes(normalized)
+      );
+
+      if (!groupMatches && !entries.length) {
+        return null;
+      }
+
+      return {
+        ...group,
+        entries: entries.length ? entries : group.entries,
+      };
+    })
+    .filter((group): group is IfcViewerPropertyGroup => Boolean(group));
+});
+
+const filteredEntryCount = computed(() =>
+  filteredGroups.value.reduce((total, group) => total + group.entries.length, 0)
+);
 </script>
 
 <style module>
 .sidebar {
-  display: flex;
-  flex-direction: column;
+  height: 100%;
   min-width: 0;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  border-left: 1px solid var(--ds-color-border-default);
-  background: color-mix(in srgb, var(--ds-color-bg-surface) 92%, transparent);
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  color: var(--ds-color-text-primary);
 }
 
 .header {
-  padding: 20px;
-  border-bottom: 1px solid var(--ds-color-border-default);
-}
-
-.eyebrow {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ds-color-text-muted);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
 }
 
 .title {
-  margin: 8px 0 0;
-  font-size: 20px;
-  line-height: 1.2;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ds-color-text-secondary);
+}
+
+.typeChip {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(238, 243, 249, 0.9);
+  color: var(--ds-color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.searchField {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(216, 224, 234, 0.88);
+}
+
+.searchIcon {
+  color: var(--ds-color-text-muted);
+}
+
+.searchInput {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ds-color-text-primary);
+  font: inherit;
+  outline: none;
+}
+
+.searchInput:disabled {
+  cursor: not-allowed;
+}
+
+.selectionCard {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(216, 224, 234, 0.88);
+}
+
+.selectionLabel {
+  font-size: 14px;
+  font-weight: 700;
   color: var(--ds-color-text-primary);
   word-break: break-word;
 }
 
-.meta {
-  display: grid;
-  gap: 4px;
-  margin-top: 12px;
+.selectionMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 8px;
   color: var(--ds-color-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .body {
-  flex: 1;
+  min-height: 0;
   overflow: auto;
-  padding: 16px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  padding-right: 4px;
 }
 
 .group {
   padding: 14px;
-  border-radius: 14px;
-  border: 1px solid var(--ds-color-border-default);
-  background: var(--ds-color-bg-surface);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(216, 224, 234, 0.88);
+}
+
+.groupHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
 }
 
 .groupTitle {
-  margin: 0 0 12px;
-  font-size: 14px;
+  margin: 0;
+  font-size: 13px;
   color: var(--ds-color-text-primary);
+}
+
+.groupCount {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(238, 243, 249, 0.9);
+  color: var(--ds-color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .propertyList {
   display: grid;
-  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 112px) minmax(0, 1fr);
   gap: 8px 12px;
-  margin: 0;
+  margin: 12px 0 0;
 }
 
 .propertyName {
@@ -130,10 +286,10 @@ defineProps<IIfcViewerPropertiesSidebarProps>();
 }
 
 .emptyState {
-  margin: auto 20px;
+  margin: auto 0;
   padding: 24px;
   border-radius: 20px;
-  background: var(--ds-color-bg-surface);
+  background: rgba(255, 255, 255, 0.66);
   border: 1px dashed var(--ds-color-border-strong);
 }
 

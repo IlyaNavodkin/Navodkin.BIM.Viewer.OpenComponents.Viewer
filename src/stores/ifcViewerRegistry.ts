@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import type {
   IfcViewerContextMenuState,
   IfcViewerModelTreeNode,
+  IfcViewerSelectionState,
   IfcViewerSelectedElement,
   IfcViewerStateSnapshot,
   IfcViewerTreeNode,
@@ -20,6 +21,15 @@ function createContextMenuState(): IfcViewerContextMenuState {
   };
 }
 
+function createSelectionState(): IfcViewerSelectionState {
+  return {
+    activeTreeNodeId: null,
+    highlightedTreeNodeIds: [],
+    selectionAnchorTreeNodeId: null,
+    highlightedElementIds: [],
+  };
+}
+
 function createViewerState(viewerId: string): IfcViewerStateSnapshot {
   return {
     viewerId,
@@ -31,6 +41,7 @@ function createViewerState(viewerId: string): IfcViewerStateSnapshot {
     errorMessage: null,
     models: [],
     selectedElement: null,
+    selection: createSelectionState(),
     contextMenu: createContextMenuState(),
   };
 }
@@ -120,6 +131,27 @@ export const useIfcViewerRegistryStore = defineStore("ifc-viewer-registry", {
       if (viewer.contextMenu.modelId === modelId) {
         viewer.contextMenu = createContextMenuState();
       }
+
+      viewer.selection.highlightedTreeNodeIds =
+        viewer.selection.highlightedTreeNodeIds.filter(
+          (nodeId) => !nodeId.startsWith(`${modelId}:`),
+        );
+      viewer.selection.highlightedElementIds =
+        viewer.selection.highlightedElementIds.filter(
+          (elementId) => !elementId.startsWith(`${modelId}:`),
+        );
+
+      if (
+        viewer.selection.activeTreeNodeId?.startsWith(`${modelId}:`)
+      ) {
+        viewer.selection.activeTreeNodeId = null;
+      }
+
+      if (
+        viewer.selection.selectionAnchorTreeNodeId?.startsWith(`${modelId}:`)
+      ) {
+        viewer.selection.selectionAnchorTreeNodeId = null;
+      }
     },
     setModelExpanded(viewerId: string, modelId: string, isExpanded: boolean) {
       this.ensureViewer(viewerId);
@@ -174,6 +206,18 @@ export const useIfcViewerRegistryStore = defineStore("ifc-viewer-registry", {
     ) {
       this.ensureViewer(viewerId);
       this.viewers[viewerId].selectedElement = element;
+    },
+    setSelectionState(
+      viewerId: string,
+      selection: IfcViewerSelectionState,
+    ) {
+      this.ensureViewer(viewerId);
+      this.viewers[viewerId].selection = {
+        activeTreeNodeId: selection.activeTreeNodeId,
+        highlightedTreeNodeIds: [...selection.highlightedTreeNodeIds],
+        selectionAnchorTreeNodeId: selection.selectionAnchorTreeNodeId,
+        highlightedElementIds: [...selection.highlightedElementIds],
+      };
     },
     showContextMenu(
       viewerId: string,

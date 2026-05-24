@@ -1,2 +1,11 @@
-// Временные декларации типов для пакетов без корректно подхваченных typings
-// (в текущей конфигурации TS с moduleResolution=bundler).
+declare module "stats.js" {
+  export default class Stats {
+    REVISION: number;
+    dom: HTMLDivElement;
+
+    showPanel(id: number): void;
+    begin(): void;
+    end(): number;
+    update(): void;
+  }
+}
