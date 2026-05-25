@@ -1,62 +1,5 @@
 <template>
   <q-layout view="hHh lpr lFf" class="workspace-layout">
-    <q-header class="workspace-header" bordered>
-      <q-toolbar class="toolbar-shell">
-        <q-btn
-          flat
-          round
-          dense
-          icon="menu"
-          class="mobile-toggle lt-md"
-          @click="leftDrawerOpen = !leftDrawerOpen"
-        />
-
-        <div class="header-copy">
-          <div class="header-title">{{ projectName }}</div>
-          <div class="header-subtitle">
-            {{ headerSubtitle }}
-          </div>
-        </div>
-
-        <q-space />
-
-        <div class="header-metrics gt-sm">
-          <div class="header-pill">
-            <span class="header-pill-label">Models</span>
-            <span class="header-pill-value">{{ models.length }}</span>
-          </div>
-          <div class="header-pill">
-            <span class="header-pill-label">Elements</span>
-            <span class="header-pill-value">{{ totalElements }}</span>
-          </div>
-          <div class="header-pill header-pill-selection">
-            <span class="header-pill-label">Selection</span>
-            <span class="header-pill-value header-pill-value-truncate">
-              {{ selectionSummary }}
-            </span>
-          </div>
-        </div>
-
-        <q-btn
-          flat
-          round
-          dense
-          icon="tune"
-          class="mobile-toggle lt-md"
-          @click="rightDrawerOpen = !rightDrawerOpen"
-        />
-
-        <q-btn
-          icon="upload_file"
-          label="Upload IFC"
-          no-caps
-          unelevated
-          class="manager-button"
-          @click="onUploadClick"
-        />
-      </q-toolbar>
-    </q-header>
-
     <q-drawer
       v-if="!isDesktop"
       v-model="leftDrawerOpen"
@@ -122,7 +65,6 @@
               :error-message="errorMessage"
               @viewport-mounted="emit('viewport-mounted', $event)"
               @viewport-unmounted="emit('viewport-unmounted')"
-              @files-selected="emit('files-selected', $event)"
             />
           </div>
 
@@ -188,14 +130,6 @@
       </q-page>
     </q-page-container>
 
-    <input
-      ref="fileInputElement"
-      class="hidden-input"
-      accept=".ifc"
-      multiple
-      type="file"
-      @change="onFileInputChange"
-    />
   </q-layout>
 </template>
 
@@ -254,7 +188,6 @@ const emit = defineEmits<{
 
 const $q = useQuasar();
 
-const fileInputElement = ref<HTMLInputElement | null>(null);
 const leftDrawerOpen = ref(false);
 const leftSidebarWidth = ref(318);
 const rightDrawerOpen = ref(false);
@@ -266,65 +199,15 @@ const resizeState = ref<{
 } | null>(null);
 
 const isDesktop = computed(() => $q.screen.gt.sm);
-const totalElements = computed(() =>
-  props.models.reduce((total, model) => total + model.elementCount, 0)
-);
 const activeTreeNodeLabel = computed(() =>
   findNodeById(props.models, props.selection.activeTreeNodeId)?.label ?? null
 );
-const selectionSummary = computed(() => {
-  if (props.selection.highlightedTreeNodeIds.length > 1) {
-    return `${props.selection.highlightedTreeNodeIds.length} selected`;
-  }
-
-  return props.selectedElement?.displayName ?? activeTreeNodeLabel.value ?? "None";
-});
-const headerSubtitle = computed(() => {
-  if (props.errorMessage) {
-    return props.errorMessage;
-  }
-
-  if (props.isLoading) {
-    return props.statusText;
-  }
-
-  if (!props.models.length) {
-    return "Upload IFC files to initialize the workspace shell.";
-  }
-
-  if (props.selection.highlightedTreeNodeIds.length > 1) {
-    return `${props.selection.highlightedTreeNodeIds.length} tree items are selected. Keep one active item to inspect a single property set.`;
-  }
-
-  if (props.selectedElement) {
-    return `Focused on ${props.selectedElement.displayName}`;
-  }
-
-  if (activeTreeNodeLabel.value) {
-    return `Active tree item: ${activeTreeNodeLabel.value}`;
-  }
-
-  return "Navigate the model tree, inspect element properties, and manage loaded IFC files.";
-});
 
 const getSidebarStyle = (width: number) => ({
   width: `${clampWidth(width)}px`,
   minWidth: `${MIN_SIDEBAR_WIDTH}px`,
   maxWidth: `${MAX_SIDEBAR_WIDTH}px`,
 });
-
-const onUploadClick = () => {
-  fileInputElement.value?.click();
-};
-
-const onFileInputChange = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const files = Array.from(target.files ?? []);
-  if (files.length > 0) {
-    emit("files-selected", files);
-  }
-  target.value = "";
-};
 
 const startResize = (side: "left" | "right", event: PointerEvent) => {
   if (!isDesktop.value) {
@@ -433,103 +316,19 @@ onBeforeUnmount(() => {
   background: linear-gradient(180deg, var(--ds-color-bg-page) 0%, var(--ds-color-bg-canvas) 100%);
 }
 
-.workspace-header {
-  background: rgba(9, 19, 37, 0.72);
-  color: var(--ds-color-text-on-dark);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.toolbar-shell {
-  min-height: 72px;
-  gap: 12px;
-  padding-inline: 12px;
-}
-
-.mobile-toggle {
-  color: var(--ds-color-text-on-dark);
-}
-
-.header-copy {
-  min-width: 0;
-}
-
-.header-title {
-  font-size: 16px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.header-subtitle {
-  margin-top: 4px;
-  font-size: 12px;
-  color: rgba(247, 247, 242, 0.7);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.header-metrics {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.header-pill {
-  display: grid;
-  gap: 2px;
-  min-width: 84px;
-  padding: 8px 12px;
-  border-radius: 14px;
-  background: rgba(248, 251, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.header-pill-selection {
-  min-width: 180px;
-  max-width: 240px;
-}
-
-.header-pill-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(247, 247, 242, 0.58);
-}
-
-.header-pill-value {
-  color: var(--ds-color-text-on-dark);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.header-pill-value-truncate {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.manager-button {
-  border-radius: 14px;
-  background: var(--ds-color-accent-500);
-  color: var(--ds-color-text-on-brand);
-}
-
 .workspace-drawer {
   background: rgba(248, 251, 255, 0.94);
 }
 
 .workspace-page {
-  min-height: calc(100vh - 72px);
+  min-height: 100vh;
   padding: 12px;
 }
 
 .workspace-stage {
   position: relative;
-  min-height: calc(100vh - 96px);
-  height: calc(100vh - 96px);
+  min-height: calc(100vh - 24px);
+  height: calc(100vh - 24px);
 }
 
 .viewport-layer {
@@ -640,38 +439,24 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--ds-color-accent-500) 42%, white);
 }
 
-.hidden-input {
-  display: none;
-}
-
 @media (max-width: 1023px) {
   .workspace-page {
     padding: 10px;
   }
 
   .workspace-stage {
-    min-height: calc(100vh - 92px);
+    min-height: calc(100vh - 20px);
     height: auto;
   }
 }
 
 @media (max-width: 720px) {
-  .toolbar-shell {
-    flex-wrap: wrap;
-    justify-content: space-between;
-  }
-
-  .header-copy {
-    order: 1;
-    width: 100%;
-  }
-
   .workspace-page {
     padding: 8px;
   }
 
   .workspace-stage {
-    min-height: calc(100vh - 112px);
+    min-height: calc(100vh - 16px);
   }
 }
 </style>

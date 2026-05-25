@@ -1,31 +1,24 @@
 <template>
-  <IfcViewerLayout
+  <IfcViewerWorkspace
     :project-name="state.projectName"
-    :models="state.models"
-    :selected-element="state.selectedElement"
-    :selection="state.selection"
-    :context-menu="state.contextMenu"
+    :current-model="state.currentModel"
+    :can-download-frag="canDownloadFrag"
     :is-loading="state.isLoading"
     :progress="state.progress"
     :status-text="state.statusText"
     :error-message="state.errorMessage"
     @viewport-mounted="page.onViewportMounted"
     @viewport-unmounted="page.onViewportUnmounted"
-    @files-selected="page.onFilesSelected"
-    @toggle-model="page.onModelToggle"
-    @toggle-tree-node="page.onTreeNodeToggle"
-    @tree-selection-change="page.onTreeSelectionChange"
-    @focus-tree-node="page.onTreeNodeFocus"
-    @select-element="page.onElementSelect"
-    @model-context-menu="page.onModelContextMenu"
-    @delete-model="page.onContextMenuDelete"
+    @ifc-file-selected="page.onIfcFileSelected"
+    @frag-file-selected="page.onFragFileSelected"
+    @download-frag="page.onFragDownload"
   />
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
 import { v4 as uuidv4 } from "uuid";
-import IfcViewerLayout from "../components/ifc-viewer/IfcViewerLayout.vue";
+import IfcViewerWorkspace from "../components/ifc-viewer/IfcViewerWorkspace.vue";
 import { useIfcViewerPage } from "../composables/useIfcViewerPage";
 
 const page = useIfcViewerPage({
@@ -33,4 +26,5 @@ const page = useIfcViewerPage({
 });
 
 const state = computed(() => page.state.value);
+const canDownloadFrag = computed(() => page.canDownloadFrag.value);
 </script>
