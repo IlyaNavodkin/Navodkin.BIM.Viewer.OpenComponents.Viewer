@@ -1,6 +1,7 @@
 import { computed } from "vue";
 import * as THREE from "three";
 import * as OBC from "@thatopen/components";
+import * as OBF from "@thatopen/components-front";
 import workerUrl from "@thatopen/fragments/dist/Worker/worker.mjs?url";
 import webIfcWasmUrl from "web-ifc/web-ifc.wasm?url";
 import type { IfcViewerCurrentModel } from "../types/ifcViewer";
@@ -79,7 +80,7 @@ export function useIfcViewerEngine(
     | OBC.World<
       OBC.SimpleScene,
       OBC.OrthoPerspectiveCamera,
-      OBC.SimpleRenderer
+      OBF.PostproductionRenderer
     >
     | null = null;
   let fragments: OBC.FragmentsManager | null = null;
@@ -254,6 +255,19 @@ export function useIfcViewerEngine(
     markRendererDirty();
   };
 
+  const applyNavigationTuning = () => {
+    if (!world) {
+      return;
+    }
+
+    const controls = world.camera.controls;
+    controls.dollyToCursor = false;
+    controls.infinityDolly = false;
+    controls.minDistance = 0.05;
+    controls.maxDistance = 5000;
+    controls.smoothTime = 0.12;
+  };
+
   const fitCurrentModel = async () => {
     if (!world || !currentModelId) {
       return;
@@ -279,22 +293,30 @@ export function useIfcViewerEngine(
     world = worlds.create<
       OBC.SimpleScene,
       OBC.OrthoPerspectiveCamera,
-      OBC.SimpleRenderer
+      OBF.PostproductionRenderer
     >();
 
     world.scene = new OBC.SimpleScene(components);
     world.scene.setup();
     world.scene.three.background = new THREE.Color("#0a1224");
 
-    world.renderer = new OBC.SimpleRenderer(components, container);
+    world.renderer = new OBF.PostproductionRenderer(components, container);
     if (IFC_VIEWER_PERFORMANCE_OPTIONS.enableManualRenderMode) {
       world.renderer.mode = OBC.RendererMode.MANUAL;
     }
     world.camera = new OBC.OrthoPerspectiveCamera(components);
 
     components.init();
-    components.get(OBC.Grids).create(world);
+    const grid = components.get(OBC.Grids).create(world);
     await world.camera.controls.setLookAt(32, 24, 32, 0, 0, 0);
+    world.camera.set("Orbit");
+    applyNavigationTuning();
+
+    world.renderer.postproduction.enabled = true;
+    world.renderer.postproduction.style = OBF.PostproductionAspect.COLOR_PEN;
+    world.renderer.postproduction.edgesPass.color = new THREE.Color(0x000000);
+    world.renderer.postproduction.edgesPass.width = 1;
+    world.renderer.postproduction.basePass.isolatedMaterials.push(grid.material);
 
     fragments = components.get(OBC.FragmentsManager);
     fragments.init(workerUrl);
@@ -309,6 +331,8 @@ export function useIfcViewerEngine(
       if (!fragments) {
         return;
       }
+
+      world?.renderer.postproduction.updateCamera();
 
       for (const [, model] of fragments.list) {
         model.useCamera(camera.three);
