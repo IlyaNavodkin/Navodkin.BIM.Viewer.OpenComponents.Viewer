@@ -25,18 +25,24 @@ interface IIfcViewerPerformanceOptions {
   enableManualRenderMode: boolean;
   enableInteractivePixelRatio: boolean;
   enableInteractiveFragmentsThrottle: boolean;
+  enableSettledRenderDebounce: boolean;
+  enableSettledRenderOnRestEvent: boolean;
   interactivePixelRatioCap: number;
   settledPixelRatioCap: number;
   interactiveFragmentsThrottleMs: number;
+  settledRenderDebounceMs: number;
 }
 
 const IFC_VIEWER_PERFORMANCE_OPTIONS: IIfcViewerPerformanceOptions = {
   enableManualRenderMode: true,
   enableInteractivePixelRatio: true,
   enableInteractiveFragmentsThrottle: true,
-  interactivePixelRatioCap: 0.75,
+  enableSettledRenderDebounce: true,
+  enableSettledRenderOnRestEvent: false,
+  interactivePixelRatioCap: 0.6,
   settledPixelRatioCap: 1.5,
-  interactiveFragmentsThrottleMs: 40,
+  interactiveFragmentsThrottleMs: 1000,
+  settledRenderDebounceMs: 100,
 };
 
 function createModelId(fileName: string, index: number) {
@@ -71,10 +77,10 @@ export function useIfcViewerEngine(
   let components: OBC.Components | null = null;
   let world:
     | OBC.World<
-        OBC.SimpleScene,
-        OBC.OrthoPerspectiveCamera,
-        OBC.SimpleRenderer
-      >
+      OBC.SimpleScene,
+      OBC.OrthoPerspectiveCamera,
+      OBC.SimpleRenderer
+    >
     | null = null;
   let fragments: OBC.FragmentsManager | null = null;
   let ifcLoader: OBC.IfcLoader | null = null;
@@ -82,11 +88,13 @@ export function useIfcViewerEngine(
   let currentModelId: string | null = null;
   let modelSequence = 0;
   let operationToken = 0;
-  let renderQualityMode: RenderQualityMode = "settled";
+  let renderQualityMode: RenderQualityMode | null = null;
   let lastInteractiveFragmentsUpdateAt = 0;
   let pendingInteractiveFragmentsUpdateTimeout: ReturnType<
     typeof window.setTimeout
   > | null = null;
+  let pendingSettledRenderTimeout: ReturnType<typeof window.setTimeout> | null =
+    null;
 
   const isMounted = computed(() => mountedContainer !== null);
 
@@ -155,12 +163,22 @@ export function useIfcViewerEngine(
   };
 
   const applyRenderQuality = (mode: RenderQualityMode) => {
-    if (!world || renderQualityMode === mode) {
+    if (!world) {
+      return;
+    }
+
+    const targetPixelRatio = getTargetPixelRatio(mode);
+    const currentPixelRatio = world.renderer.three.getPixelRatio();
+    const qualityAlreadyApplied =
+      renderQualityMode === mode &&
+      Math.abs(currentPixelRatio - targetPixelRatio) < 0.001;
+
+    if (qualityAlreadyApplied) {
       return;
     }
 
     renderQualityMode = mode;
-    world.renderer.three.setPixelRatio(getTargetPixelRatio(mode));
+    world.renderer.three.setPixelRatio(targetPixelRatio);
     world.renderer.resize();
     markRendererDirty();
   };
@@ -169,6 +187,13 @@ export function useIfcViewerEngine(
     if (pendingInteractiveFragmentsUpdateTimeout !== null) {
       window.clearTimeout(pendingInteractiveFragmentsUpdateTimeout);
       pendingInteractiveFragmentsUpdateTimeout = null;
+    }
+  };
+
+  const clearPendingSettledRender = () => {
+    if (pendingSettledRenderTimeout !== null) {
+      window.clearTimeout(pendingSettledRenderTimeout);
+      pendingSettledRenderTimeout = null;
     }
   };
 
@@ -206,12 +231,23 @@ export function useIfcViewerEngine(
   };
 
   const requestInteractiveRender = () => {
+    clearPendingSettledRender();
     applyRenderQuality("interactive");
     scheduleInteractiveFragmentsUpdate();
     markRendererDirty();
+
+    if (!IFC_VIEWER_PERFORMANCE_OPTIONS.enableSettledRenderDebounce) {
+      return;
+    }
+
+    pendingSettledRenderTimeout = window.setTimeout(() => {
+      pendingSettledRenderTimeout = null;
+      requestSettledRender();
+    }, IFC_VIEWER_PERFORMANCE_OPTIONS.settledRenderDebounceMs);
   };
 
   const requestSettledRender = () => {
+    clearPendingSettledRender();
     clearPendingInteractiveFragmentsUpdate();
     applyRenderQuality("settled");
     void fragments?.core.update(true);
@@ -264,7 +300,9 @@ export function useIfcViewerEngine(
     fragments.init(workerUrl);
 
     world.camera.controls.addEventListener("update", requestInteractiveRender);
-    world.camera.controls.addEventListener("rest", requestSettledRender);
+    if (IFC_VIEWER_PERFORMANCE_OPTIONS.enableSettledRenderOnRestEvent) {
+      world.camera.controls.addEventListener("rest", requestSettledRender);
+    }
     world.renderer.onResize.add(markRendererDirty);
 
     world.onCameraChanged.add((camera) => {
@@ -322,8 +360,9 @@ export function useIfcViewerEngine(
   const disposeRuntime = () => {
     operationToken += 1;
     currentModelId = null;
-    renderQualityMode = "settled";
+    renderQualityMode = null;
     clearPendingInteractiveFragmentsUpdate();
+    clearPendingSettledRender();
     mountedContainer = null;
     fragments = null;
     ifcLoader = null;
